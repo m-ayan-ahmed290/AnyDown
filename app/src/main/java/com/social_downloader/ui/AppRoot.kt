@@ -7,6 +7,19 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.painterResource
+import com.social_downloader.R
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -78,8 +91,18 @@ private fun AppScaffold(vm: MainViewModel) {
 
     // Android 9 only: writing into the public Downloads folder needs the legacy storage permission.
     val storageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) vm.download()
+        if (granted) { vm.downloads.retryStorageMigration(); vm.download() }
         else vm.say("Storage permission is required on Android 9 to save videos to Downloads.")
+    }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            val prefs = context.getSharedPreferences("migration", android.content.Context.MODE_PRIVATE)
+            if (!prefs.getBoolean("storage_asked", false) &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                prefs.edit().putBoolean("storage_asked", true).apply()
+                storageLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+        }
     }
     val startDownload: () -> Unit = {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
@@ -104,32 +127,50 @@ private fun AppScaffold(vm: MainViewModel) {
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text(if (vm.tab == Tab.HOME) "Social Downloader" else vm.tab.label) }) },
+        topBar = {
+            TopAppBar(title = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    BrandMark(Modifier.size(36.dp))
+                    Column {
+                        Text(if (vm.tab == Tab.HOME) "AnyDown" else vm.tab.label, fontWeight = FontWeight.Bold)
+                        Text("Your media. Your space.", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            })
+        },
         bottomBar = {
-            NavigationBar {
-                Tab.entries.forEach { tab ->
-                    NavigationBarItem(
-                        selected = vm.tab == tab,
-                        onClick = { vm.tab = tab },
-                        icon = {
-                            if (tab == Tab.QUEUE && pendingCount > 0) {
-                                BadgedBox(badge = { Badge { Text("$pendingCount") } }) {
-                                    Icon(tab.icon(), contentDescription = tab.label)
+            Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, tonalElevation = 2.dp) {
+                Row(Modifier.navigationBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Tab.entries.forEach { tab ->
+                        val selected = vm.tab == tab
+                        val color by animateColorAsState(if (selected) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surfaceContainerLow, label = "Tab color")
+                        Surface(modifier = Modifier.weight(1f), color = color, shape = RoundedCornerShape(20.dp)) {
+                            Column(Modifier.selectable(selected, role = Role.Tab, onClick = { vm.tab = tab })
+                                .padding(horizontal = 2.dp, vertical = 10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                BadgedBox(badge = {
+                                    if (tab == Tab.QUEUE && pendingCount > 0) Badge { Text("$pendingCount") }
+                                }) {
+                                    Icon(tab.icon(), contentDescription = null, modifier = Modifier.size(23.dp),
+                                        tint = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                            } else {
-                                Icon(tab.icon(), contentDescription = tab.label)
+                                Text(tab.label, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                        },
-                        label = { Text(tab.label) },
-                    )
+                        }
+                    }
                 }
             }
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        Box(Modifier.padding(padding)) {
+        Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
             when (vm.tab) {
-                Tab.HOME -> HomeScreen(vm, engineState, onDownload = startDownload)
+                Tab.HOME -> HomeScreen(vm, engineState, onDownload = startDownload, modifier = Modifier.widthIn(max = 760.dp))
                 Tab.QUEUE -> QueueScreen(items, vm)
                 Tab.LIBRARY -> LibraryScreen(items, vm)
                 Tab.HISTORY -> HistoryScreen(items, vm)

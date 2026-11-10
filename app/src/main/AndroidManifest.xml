@@ -40,7 +40,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Android Share sheet: "Share" -> "Social Downloader" from any app -->
+            <!-- Android Share sheet: "Share" -> "AnyDown" from any app -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

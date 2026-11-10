@@ -122,3 +122,15 @@ fun EmptyState(icon: ImageVector, title: String, subtitle: String, modifier: Mod
         )
     }
 }
+
+
+/** Uses the same vector as the launcher; tint follows Material You inside the app. */
+@Composable
+fun BrandMark(modifier: Modifier = Modifier) {
+    Surface(modifier = modifier, color = MaterialTheme.colorScheme.primaryContainer,
+        shape = RoundedCornerShape(12.dp)) {
+        Icon(androidx.compose.ui.res.painterResource(com.social_downloader.R.drawable.ic_anydown_mark),
+            contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.padding(5.dp))
+    }
+}

@@ -28,6 +28,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -61,6 +64,21 @@ class DownloadManager(
             .sortedByDescending { it.createdAt },
     )
     val items: StateFlow<List<DownloadItem>> = _items.asStateFlow()
+
+    private val migrationLock = Mutex()
+    private suspend fun migrateStorage() = withContext(Dispatchers.IO) {
+        migrationLock.withLock {
+            val result = StorageMigration.migrate(app, _items.value)
+            _items.update { current -> current.map { result[it.id] ?: it } }
+            store.save(_items.value)
+        }
+    }
+    fun retryStorageMigration() { scope.launch { migrateStorage() } }
+
+    init {
+        retryStorageMigration()
+        scope.launch { settings.maxConcurrent.collect { pump() } }
+    }
 
     // ---------------------------------------------------------------- public API
 
@@ -151,13 +169,13 @@ class DownloadManager(
     private fun pump() {
         synchronized(lock) {
             val max = settings.maxConcurrent.value
-            var active = _items.value.count { it.status.isActive }
+            var active = jobs.size
             val queued = _items.value.filter { it.status == DownloadStatus.QUEUED }.sortedBy { it.createdAt }
             for (item in queued) {
                 if (active >= max) break
                 update(item.id) { it.copy(status = DownloadStatus.DOWNLOADING, progress = -1f, etaSeconds = -1) }
                 active++
-                jobs[item.id] = scope.launch(Dispatchers.IO) {
+                jobs[item.id] = scope.launch(Dispatchers.IO, start = kotlinx.coroutines.CoroutineStart.LAZY) {
                     try {
                         run(item.id)
                     } finally {
@@ -165,6 +183,7 @@ class DownloadManager(
                         pump()
                     }
                 }
+                jobs[item.id]?.start()
             }
         }
     }
@@ -174,6 +193,7 @@ class DownloadManager(
         val tmpDir = File(app.cacheDir, "dl/$id")
         val cookieFile = cookies.tempCopy(item.platform)
         try {
+            migrateStorage()
             engine.ensureReady()
             if (settings.wifiOnly.value && isMetered()) {
                 throw DownloaderException(
@@ -181,8 +201,7 @@ class DownloadManager(
                 )
             }
             if (find(id)?.status == DownloadStatus.CANCELED) return
-            tmpDir.deleteRecursively()
-            tmpDir.mkdirs()
+            if (!tmpDir.exists()) tmpDir.mkdirs()
 
             val request = buildRequest(item, tmpDir, cookieFile)
             val totalStreams = item.expectedStreams.coerceAtLeast(1)
@@ -196,7 +215,7 @@ class DownloadManager(
                     streamIdx++
                 } else if (isPostProcessing(line)) {
                     update(id) {
-                        it.copy(
+                        if (it.status == DownloadStatus.CANCELED) it else it.copy(
                             status = DownloadStatus.PROCESSING, progress = -1f, etaSeconds = -1,
                             speedBytes = -1,
                             statusDetail = if (line.startsWith("[Merger]")) "Merging video & audio…" else "Processing…",
@@ -234,8 +253,12 @@ class DownloadManager(
             val output = findOutput(tmpDir, item.audioOnly)
                 ?: throw DownloaderException("The download finished but no output file was produced.")
             val mime = MediaSaver.mimeFor(output)
-            val saved = MediaSaver.save(app, output, mime, settings.useSubfolder.value)
+            val saved = MediaSaver.save(app, output, mime, settings.useSubfolder.value, item.platform)
 
+            if (find(id)?.status == DownloadStatus.CANCELED || find(id) == null) {
+                MediaSaver.delete(app, saved.uri.toString(), saved.path)
+                return
+            }
             update(id) {
                 it.copy(
                     status = DownloadStatus.COMPLETED, progress = 1f, etaSeconds = -1, statusDetail = null,
@@ -270,7 +293,10 @@ class DownloadManager(
             addOption("--retries", "5")
             addOption("--fragment-retries", "5")
             addOption("--socket-timeout", "30")
-            addOption("--concurrent-fragments", "4")
+            addOption("--concurrent-fragments", settings.fragments.value.toString())
+            addOption("--retry-sleep", "exp=1:10")
+            addOption("--fragment-retry-sleep", "exp=1:10")
+            addOption("--buffer-size", "64K")
             addOption("-o", "${dir.absolutePath}/%(title).100B.%(ext)s")
             if (item.audioOnly) {
                 addOption("-f", FormatSelector.AUDIO_FORMAT)

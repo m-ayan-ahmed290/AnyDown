@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.FilterChip
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -32,6 +35,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -313,19 +317,28 @@ fun LibraryScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val videos = items.filter { it.status == DownloadStatus.COMPLETED }.sortedByDescending { it.finishedAt }
+    val showAdultSites by vm.settings.showAdultSites.collectAsStateWithLifecycle()
+    var search by remember { mutableStateOf("") }
+    var platform by remember { mutableStateOf<com.social_downloader.engine.Platform?>(null) }
+    var largestFirst by remember { mutableStateOf(false) }
+    val allVideos = items.filter { it.status == DownloadStatus.COMPLETED }
+    val filtered = allVideos.filter {
+        (platform == null || it.platform == platform) &&
+            (it.title.contains(search, true) || it.fileName.orEmpty().contains(search, true))
+    }
+    val videos = if (largestFirst) filtered.sortedByDescending { it.sizeBytes } else filtered.sortedByDescending { it.finishedAt }
     var missing by remember { mutableStateOf(emptySet<String>()) }
     var toDelete by remember { mutableStateOf<DownloadItem?>(null) }
     var confirmAll by remember { mutableStateOf(false) }
 
     // Re-check which files still exist (the user may have deleted some in a file manager).
-    LaunchedEffect(videos.map { it.id }) {
+    LaunchedEffect(allVideos.map { it.id to it.fileUri }) {
         missing = withContext(Dispatchers.IO) {
-            videos.filter { !MediaSaver.exists(context, it.fileUri, it.filePath) }.map { it.id }.toSet()
+            allVideos.filter { !MediaSaver.exists(context, it.fileUri, it.filePath) }.map { it.id }.toSet()
         }
     }
 
-    if (videos.isEmpty()) {
+    if (allVideos.isEmpty()) {
         EmptyState(
             icon = Icons.Rounded.VideoLibrary,
             title = "No downloaded videos",
@@ -343,6 +356,25 @@ fun LibraryScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
+            OutlinedTextField(value = search, onValueChange = { search = it }, modifier = Modifier.fillMaxWidth(),
+                singleLine = true, label = { Text("Search your library") }, shape = MaterialTheme.shapes.medium)
+        }
+        item {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item { FilterChip(selected = platform == null, onClick = { platform = null }, label = { Text("All sites") }) }
+                items(allVideos.map { it.platform }.distinct().filter { !it.adult || showAdultSites }, key = { it.name }) { site ->
+                    FilterChip(selected = site == platform, onClick = { platform = site }, label = { Text(site.label) })
+                }
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = !largestFirst, onClick = { largestFirst = false }, label = { Text("Newest") })
+                FilterChip(selected = largestFirst, onClick = { largestFirst = true }, label = { Text("Largest") })
+            }
+            if (videos.isEmpty()) Text("No downloads match your search.")
+        }
+        item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "${videos.size} video${if (videos.size == 1) "" else "s"} · ${Format.bytes(totalBytes)}",
@@ -352,7 +384,7 @@ fun LibraryScreen(
                 TextButton(onClick = { confirmAll = true }) {
                     Icon(Icons.Rounded.DeleteSweep, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("Delete all")
+                    Text("Delete shown")
                 }
             }
         }
@@ -427,13 +459,13 @@ fun LibraryScreen(
     if (confirmAll) {
         AlertDialog(
             onDismissRequest = { confirmAll = false },
-            title = { Text("Delete all videos?") },
+            title = { Text("Delete shown media?") },
             text = { Text("This permanently deletes ${videos.size} file(s) downloaded by this app.") },
             confirmButton = {
                 Button(onClick = {
                     videos.forEach { vm.downloads.remove(it.id, deleteFile = true) }
                     confirmAll = false
-                }) { Text("Delete all") }
+                }) { Text("Delete shown") }
             },
             dismissButton = { TextButton(onClick = { confirmAll = false }) { Text("Cancel") } },
         )

@@ -38,6 +38,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.font.FontWeight
+import com.social_downloader.data.DownloadStatus
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,6 +67,9 @@ fun HomeScreen(
     onDownload: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val showAdultSites by vm.settings.showAdultSites.collectAsStateWithLifecycle()
+    val downloads by vm.downloads.items.collectAsStateWithLifecycle()
+    val organized by vm.settings.useSubfolder.collectAsStateWithLifecycle()
     val focus = LocalFocusManager.current
     val state = vm.fetchState
 
@@ -69,6 +78,25 @@ fun HomeScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                shape = RoundedCornerShape(28.dp)) {
+                Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("SAVE WHAT MOVES YOU", style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text("One link.\nYours to keep.", style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text("Videos & audio, neatly organized on your device.",
+                        color = MaterialTheme.colorScheme.onPrimaryContainer, style = MaterialTheme.typography.bodyMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Text("${downloads.count { it.status == DownloadStatus.COMPLETED }} saved", style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Text("${downloads.count { it.status.isPending }} in queue", style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                }
+            }
+        }
         item { UrlInputCard(vm, focus) }
 
         item {
@@ -81,12 +109,13 @@ fun HomeScreen(
                     selected = vm.selectedQuality,
                     onSelect = vm::selectQuality,
                     onDownload = onDownload,
+                    organized = organized,
                 )
             }
         }
 
         if (state is FetchState.Idle) {
-            item { SupportedSitesCard() }
+            item { SupportedSitesCard(showAdultSites) }
         }
     }
 }
@@ -139,7 +168,7 @@ private fun UrlInputCard(vm: MainViewModel, focus: FocusManager) {
                 ) {
                     Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Get video")
+                    Text("Find media")
                 }
             }
         }
@@ -203,6 +232,7 @@ private fun PreviewCard(
     selected: QualityOption?,
     onSelect: (QualityOption) -> Unit,
     onDownload: () -> Unit,
+    organized: Boolean,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -273,7 +303,7 @@ private fun PreviewCard(
                 Text(listOfNotNull(what, size).joinToString("  ·  "))
             }
             Text(
-                "Saved to Downloads/SocialDownloader as a single file with audio and video.",
+                if (organized) "Saved to Downloads/AnyDowns/${info.platform.folderName}." else "Saved to Downloads.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 4.dp),
@@ -283,31 +313,28 @@ private fun PreviewCard(
 }
 
 @Composable
-private fun SupportedSitesCard() {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
+private fun SupportedSitesCard(showAdultSites: Boolean) {
+    var search by remember { mutableStateOf("") }
+    val sites = Platform.directory(showAdultSites, search)
+    Card(modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = MaterialTheme.shapes.large,
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Works with", style = MaterialTheme.typography.titleSmall)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Platform.named.forEach { PlatformChip(it) }
+        shape = MaterialTheme.shapes.large) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("A world of media", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Your favorites, all in one place.", style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedTextField(value = search, onValueChange = { search = it }, modifier = Modifier.fillMaxWidth(),
+                singleLine = true, label = { Text("Search websites") },
+                leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
+                shape = MaterialTheme.shapes.medium)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                sites.forEach { PlatformChip(it) }
             }
-            Text(
-                "…plus 1000+ other sites supported by yt-dlp. Public videos only – private, " +
-                    "login-gated and DRM-protected content can't be downloaded.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                "Tip: in any app, tap Share → Social Downloader to start instantly.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (sites.isEmpty()) Text("No matching sites. You can still try a direct media link.")
+            Text("Plus hundreds more through yt-dlp. Support varies by site, region and sign-in requirements. DRM-protected media isn't supported.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Share a link from any app → AnyDown. Choose quality, then save.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
         }
     }
 }

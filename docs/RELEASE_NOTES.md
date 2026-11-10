@@ -1,0 +1,7 @@
+AnyDown redesign: wallpaper-aware theme and adaptive logo, full icon-and-label tab highlights, searchable website directory, adult-site names hidden by default (enable in Settings), library search/site filters/sorting, per-site download folders and automatic migration of accessible old downloads.
+
+Download tuning: up to five parallel files, configurable fragment connections (2/4/8/16), bounded exponential retries, and cancellation that retains the process slot until it exits.
+
+This preview APK is debug-signed and installable. CI runners use temporary debug keys; upgrading builds signed by a different key requires uninstalling the old build. Uninstalling clears private history and sign-in cookies and can prevent automatic migration of files created by the previous installation. Back up anything important and prefer a stable private signing key for production distribution. The application ID is unchanged so same-key upgrades retain history and storage ownership.
+
+Existing Downloads/SocialDownloader files owned by this installation move to Downloads/AnyDowns/<Website> on launch. Unknown files go to Other (or retain their old subfolder). Android 9 needs storage permission. Android scoped storage cannot automatically move files owned by another installation or app; use your file manager for those. Site support depends on yt-dlp and may require sign-in; DRM is not supported. Higher connection counts do not guarantee higher speeds.

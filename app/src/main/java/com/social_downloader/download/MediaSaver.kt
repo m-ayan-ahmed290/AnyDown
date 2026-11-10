@@ -22,22 +22,23 @@ import java.io.IOException
  *  - Android 9   : direct file write (needs WRITE_EXTERNAL_STORAGE) + media scan
  */
 object MediaSaver {
-    const val SUBFOLDER = "SocialDownloader"
+    const val SUBFOLDER = "AnyDowns"
 
     data class Saved(val uri: Uri, val path: String?, val displayName: String, val sizeBytes: Long)
 
-    fun save(context: Context, src: File, mime: String, useSubfolder: Boolean): Saved {
+    fun save(context: Context, src: File, mime: String, useSubfolder: Boolean, platform: com.social_downloader.engine.Platform): Saved {
         val name = sanitize(src.name)
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            saveScoped(context, src, name, mime, useSubfolder)
+            saveScoped(context, src, name, mime, useSubfolder, platform)
         } else {
-            saveLegacy(context, src, name, mime, useSubfolder)
+            saveLegacy(context, src, name, mime, useSubfolder, platform)
         }
     }
 
-    private fun saveScoped(context: Context, src: File, name: String, mime: String, useSubfolder: Boolean): Saved {
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.Q)
+    private fun saveScoped(context: Context, src: File, name: String, mime: String, useSubfolder: Boolean, platform: com.social_downloader.engine.Platform): Saved {
         val resolver = context.contentResolver
-        val relativePath = if (useSubfolder) "${Environment.DIRECTORY_DOWNLOADS}/$SUBFOLDER"
+        val relativePath = if (useSubfolder) "${Environment.DIRECTORY_DOWNLOADS}/$SUBFOLDER/${platform.folderName}"
         else Environment.DIRECTORY_DOWNLOADS
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, name)
@@ -63,14 +64,14 @@ object MediaSaver {
     }
 
     @Suppress("DEPRECATION")
-    private fun saveLegacy(context: Context, src: File, name: String, mime: String, useSubfolder: Boolean): Saved {
+    private fun saveLegacy(context: Context, src: File, name: String, mime: String, useSubfolder: Boolean, platform: com.social_downloader.engine.Platform): Saved {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE)
             != PackageManager.PERMISSION_GRANTED
         ) {
             throw DownloaderException("Storage permission is required on Android 9 to save into Downloads. Grant it and retry.")
         }
         val base = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        val dir = if (useSubfolder) File(base, SUBFOLDER) else base
+        val dir = if (useSubfolder) File(base, "$SUBFOLDER/${platform.folderName}") else base
         if (!dir.exists() && !dir.mkdirs()) throw IOException("Couldn't create ${dir.absolutePath}")
 
         val stem = name.substringBeforeLast('.', name)

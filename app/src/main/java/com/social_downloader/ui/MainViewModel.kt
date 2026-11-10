@@ -92,7 +92,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (UrlTools.check(url).isValid) fetch()
     }
 
-    /** Android Share sheet → "Social Downloader". */
+    /** Android Share sheet → "AnyDown". */
     fun onSharedText(text: String?) {
         val url = text?.let { UrlTools.extractUrl(it) }
         tab = Tab.HOME

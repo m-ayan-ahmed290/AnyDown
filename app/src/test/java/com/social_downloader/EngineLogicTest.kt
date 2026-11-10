@@ -32,9 +32,19 @@ class UrlToolsTest {
             "https://www.threads.net/@a/post/b" to Platform.THREADS,
             "https://vm.tiktok.com/abc/" to Platform.TIKTOK,
             "https://fb.watch/abc/" to Platform.FACEBOOK,
-            "https://vimeo.com/123" to Platform.OTHER,
+            "https://vimeo.com/123" to Platform.VIMEO,
         )
         cases.forEach { (url, platform) -> assertEquals(url, platform, UrlTools.detect(url)) }
+    }
+
+    @Test fun recognizesExpandedSitesAndAdultHosts() {
+        assertEquals(Platform.SOUNDCLOUD, UrlTools.detect("https://on.soundcloud.com/example"))
+        assertEquals(Platform.PORNHUB, UrlTools.detect("https://www.pornhub.com/view_video.php?viewkey=test"))
+        assertEquals(Platform.OTHER, UrlTools.detect("https://pornhub.com.example.org/video"))
+        assertTrue(Platform.PORNHUB.adult)
+        assertFalse(Platform.YOUTUBE.adult)
+        assertEquals("Instagram", Platform.INSTAGRAM.folderName)
+        assertTrue(Platform.named.all { !it.folderName.contains('/') && it.folderName != ".." })
     }
 
     @Test fun doesNotConfuseLookalikeHosts() {

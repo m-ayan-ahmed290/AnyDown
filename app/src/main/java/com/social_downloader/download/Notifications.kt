@@ -63,7 +63,7 @@ object Notifications {
 
         if (pending.size <= 1) {
             val item = pending.firstOrNull()
-            builder.setContentTitle(item?.title ?: "Social Downloader")
+            builder.setContentTitle(item?.title ?: "AnyDown")
             val processing = item?.status == DownloadStatus.PROCESSING
             val p = item?.progress ?: -1f
             if (item == null) {

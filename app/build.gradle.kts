@@ -14,8 +14,8 @@ android {
         applicationId = "com.social_downloader"
         minSdk = 28            // Android 9
         targetSdk = 35         // Android 15
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "2.0.0"
 
         // yt-dlp's Python runtime and FFmpeg ship as native libraries.
         // Drop an ABI here to shrink the APK (most phones are arm64-v8a).
@@ -40,6 +40,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    testOptions { unitTests.isIncludeAndroidResources = true }
 
     buildFeatures {
         compose = true
@@ -89,4 +91,5 @@ dependencies {
     implementation("io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
 }

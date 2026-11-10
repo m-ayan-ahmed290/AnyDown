@@ -58,6 +58,8 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     val theme by s.themeMode.collectAsStateWithLifecycle()
     val dynamic by s.dynamicColor.collectAsStateWithLifecycle()
     val concurrent by s.maxConcurrent.collectAsStateWithLifecycle()
+    val fragments by s.fragments.collectAsStateWithLifecycle()
+    val showAdultSites by s.showAdultSites.collectAsStateWithLifecycle()
     val wifiOnly by s.wifiOnly.collectAsStateWithLifecycle()
     val subfolder by s.useSubfolder.collectAsStateWithLifecycle()
     val channel by s.updateChannel.collectAsStateWithLifecycle()
@@ -88,17 +90,24 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
             }
         }
 
+        Section("Website directory") {
+            ToggleRow("Show adult sites", "Show adult website names in the directory. Off by default.", showAdultSites, s::setShowAdultSites)
+        }
+
         Section("Downloads") {
             Text("Simultaneous downloads", style = MaterialTheme.typography.labelLarge)
             Choice(
-                options = listOf("1", "2", "3"),
+                options = listOf("1", "2", "3", "4", "5"),
                 selectedIndex = concurrent - 1,
                 onSelect = { s.setMaxConcurrent(it + 1) },
             )
+            Text("Fragment connections per download", style = MaterialTheme.typography.labelLarge)
+            Choice(listOf("2", "4", "8", "16"), listOf(2, 4, 8, 16).indexOf(fragments)) { s.setFragments(listOf(2, 4, 8, 16)[it]) }
+            Text("More connections can help segmented streams. Site limits and network speed still apply.", style = MaterialTheme.typography.bodySmall)
             ToggleRow("Wi-Fi only", "Don't download over mobile data", wifiOnly, s::setWifiOnly)
             ToggleRow(
-                "Save in a subfolder",
-                if (subfolder) "Downloads/${MediaSaver.SUBFOLDER}" else "Downloads",
+                "Organize by website",
+                if (subfolder) "Downloads/${MediaSaver.SUBFOLDER}/<Website>" else "Downloads",
                 subfolder, s::setUseSubfolder,
             )
         }
@@ -177,7 +186,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
         }
 
         Section("About") {
-            Text("Social Downloader ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleSmall)
+            Text("AnyDown ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleSmall)
             Text(
                 "Open source (GPL-3.0). Everything runs on your device using yt-dlp and FFmpeg – " +
                     "no server, no accounts, no tracking.",
@@ -186,8 +195,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
             )
             Text(
                 "Only download content you own or have permission to save, and respect each " +
-                    "platform's terms of service and local copyright law. Private, login-gated and " +
-                    "DRM-protected media is intentionally not supported.",
+                    "platform's terms of service and local copyright law. DRM-protected media is not supported.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
