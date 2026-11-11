@@ -260,14 +260,22 @@ class DownloadManager(
             if (find(id)?.status == DownloadStatus.CANCELED) return
             if (!tmpDir.exists()) tmpDir.mkdirs()
 
-            val request = buildRequest(item, tmpDir, cookieFile)
+            val infoFile = if (item.platform == com.social_downloader.engine.Platform.TIKTOK) {
+                val snapshot = File(tmpDir, "preview.info.json")
+                if (!engine.copySnapshot(item.url, snapshot)) {
+                    engine.fetchInfo(item.url)
+                    engine.copySnapshot(item.url, snapshot)
+                }
+                snapshot.takeIf { it.isFile }
+            } else null
+            val request = buildRequest(item, tmpDir, cookieFile, infoFile)
             val totalStreams = item.expectedStreams.coerceAtLeast(1)
             var streamIdx = 0
             var best = 0f
             var lastEmit = 0L
             var lastSpeed = -1L
 
-            YoutubeDL.getInstance().execute(request, processId, false) { _, eta, line ->
+            val progressCallback: (Float, Long, String) -> Unit = { _, eta, line ->
                 if (line.startsWith("[download] Destination:")) {
                     streamIdx++
                 } else if (isPostProcessing(line)) {
@@ -300,6 +308,20 @@ class DownloadManager(
                         }
                     }
                 }
+            }
+
+            try {
+                YoutubeDL.getInstance().execute(request, processId, false, progressCallback)
+            } catch (e: YoutubeDL.CanceledException) { throw e }
+            catch (e: Exception) {
+                if (infoFile == null || !com.social_downloader.engine.ExtractionRecovery.needsFreshSnapshot(e.message) ||
+                    find(id)?.status == DownloadStatus.CANCELED || find(id) == null) throw e
+                update(id) { if (it.status == DownloadStatus.CANCELED) it else it.copy(progress = -1f, statusDetail = "Refreshing video links…") }
+                engine.fetchInfo(item.url)
+                if (!engine.copySnapshot(item.url, infoFile)) throw e
+                if (find(id)?.status == DownloadStatus.CANCELED || find(id) == null) return
+                streamIdx = 0; best = 0f; lastSpeed = -1L
+                YoutubeDL.getInstance().execute(buildRequest(item, tmpDir, cookieFile, infoFile), processId, false, progressCallback)
             }
 
             if (find(id)?.status != DownloadStatus.DOWNLOADING && find(id)?.status != DownloadStatus.PROCESSING) {
@@ -341,8 +363,9 @@ class DownloadManager(
         }
     }
 
-    private fun buildRequest(item: DownloadItem, dir: File, cookieFile: File?): YoutubeDLRequest =
-        YoutubeDLRequest(item.url).apply {
+    private fun buildRequest(item: DownloadItem, dir: File, cookieFile: File?, infoFile: File?): YoutubeDLRequest =
+        YoutubeDLRequest(if (infoFile == null) listOf(item.url) else emptyList()).apply {
+            if (infoFile != null) addOption("--load-info-json", infoFile.absolutePath)
             addOption("--no-playlist")
             addOption("--playlist-items", "1")
             addOption("--newline")

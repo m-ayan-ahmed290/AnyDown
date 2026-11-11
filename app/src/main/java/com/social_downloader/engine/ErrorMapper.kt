@@ -18,6 +18,10 @@ object ErrorMapper {
         val site = if (platform == Platform.OTHER) "This site" else platform.label
 
         return when {
+            ExtractionRecovery.isTikTokParseFailure(platform, raw) ->
+                "TikTok returned a page the engine couldn't read. Update yt-dlp in Settings → Download engine, then retry. " +
+                    "Cookies alone won't fix this. If Stable still fails, try Nightly."
+
             "unsupported url" in msg ->
                 "This link isn't supported. Open the video or post itself and share that link " +
                     "(not a profile, search or home page)."

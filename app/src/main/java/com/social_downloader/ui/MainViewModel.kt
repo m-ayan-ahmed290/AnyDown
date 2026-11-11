@@ -182,11 +182,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun saveCookies(platform: Platform, text: String) {
         cookies.save(platform, text)
+        if (platform == Platform.TIKTOK) engine.clearSnapshots()
         say("Cookies saved for ${platform.label}. Try your link again.")
     }
 
     fun signOut(platform: Platform) {
         cookies.clear(platform)
+        if (platform == Platform.TIKTOK) engine.clearSnapshots()
         android.webkit.CookieManager.getInstance().removeAllCookies(null)
         android.webkit.CookieManager.getInstance().flush()
         say("Signed out of ${platform.label}.")

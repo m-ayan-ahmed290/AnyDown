@@ -240,7 +240,7 @@ fun DownloadCard(
                 DownloadStatus.DOWNLOADING -> {
                     if (item.progress < 0f) {
                         LinearProgressIndicator(Modifier.fillMaxWidth())
-                        StatusText("Starting…")
+                        StatusText(item.statusDetail ?: "Starting…")
                     } else {
                         LinearProgressIndicator(progress = { item.progress }, modifier = Modifier.fillMaxWidth())
                         StatusText(

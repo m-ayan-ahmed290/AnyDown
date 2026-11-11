@@ -51,3 +51,7 @@ With Show adult sites enabled, the final Settings section provides adult account
 If automatic migration missed old files, use Settings → Storage upgrade → Import old downloads. Choose multiple media files using Android's picker and optionally choose their website folder. Copies appear in AnyDowns and Library; originals remain untouched. The UI reports imported/skipped/failed counts and skips previously imported URIs while the saved copy exists. After uninstall, platform metadata may be unavailable; choose a folder explicitly or use Other. Copying requires space for staging and destination files. This is an explicit recovery path rather than a claim that Android grants silent access to another installation's files.
 
 Signed work-branch builds now publish a release when versionName has no existing release. Existing releases are never overwritten. Tag-triggered releases remain available.
+
+## TikTok recovery in 2.1.1
+
+TikTok preview extraction now writes complete info JSON into a short-lived private snapshot. A download loads this info instead of repeating the page request. Snapshots expire after five minutes, and changing TikTok cookies clears them. Missing/expired snapshots are re-extracted. A stale media URL (403/410) gets one fresh extraction and retry. Recognized TikTok parser failures attempt one official engine update per app session using the selected update channel. Access restrictions and rate limits do not trigger automatic updates. The UI gives a short update/retry instruction instead of the upstream issue-report dump.
