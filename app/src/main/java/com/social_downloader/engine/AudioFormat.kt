@@ -11,6 +11,9 @@ enum class AudioFormat(val label: String, val extension: String, val encoder: St
     fun validBitrate(value: Int?): Int? = if (lossless) null else value?.takeIf { it in bitrates } ?: defaultBitrate
     fun qualityLabel(bitrate: Int?) = if (lossless) "Lossless output" else bitrate?.let { "$it kbps" } ?: "Best available"
 
+    fun outputFile(staging: java.io.File, input: java.io.File): java.io.File =
+        java.io.File(java.io.File(staging, "converted"), "${input.nameWithoutExtension}.$extension")
+
     fun ffmpegArguments(input: String, output: String, bitrate: Int?): List<String> =
         listOf("-nostdin", "-hide_banner", "-y", "-i", input, "-map", "0:a:0", "-vn", "-c:a", encoder) +
             (if (lossless) emptyList() else listOf("-b:a", "${validBitrate(bitrate)}k")) + listOf(output)

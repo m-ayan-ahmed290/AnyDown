@@ -101,6 +101,18 @@ class StorageUpgradeTest {
         assertEquals(320, restored.audioBitrateKbps)
     }
 
+    @Test fun interruptedConversionCannotReplaceTheOriginalOnRetry() {
+        val staging = File(app.cacheDir, "audio-retry").apply { mkdirs() }
+        val source = File(staging, "track.m4a").apply { writeText("complete source") }
+        val partial = com.social_downloader.engine.AudioFormat.MP3.outputFile(staging, source)
+        partial.parentFile!!.mkdirs(); partial.writeText("partial")
+        val cookies = com.social_downloader.data.CookieStore(app)
+        val manager = com.social_downloader.download.DownloadManager(app,
+            com.social_downloader.engine.YtDlpEngine(app, cookies), SettingsStore(app), cookies)
+        assertEquals(source, manager.findOutput(staging, true, "mp3"))
+        assertNotEquals(source, partial)
+    }
+
     @Test fun deniedLegacyPermissionLeavesFilesUntouched() {
         shadowOf(app).denyPermissions(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         val base = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)

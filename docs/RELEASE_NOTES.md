@@ -1,6 +1,7 @@
-AnyDown 2.2.0 adds audio format/quality choices and YouTube cookie import, and includes the TikTok recovery fix from 2.1.1.
+AnyDown 2.2.1 adds audio format/quality choices and YouTube cookie import, and includes the TikTok recovery fix from 2.1.1.
 
 - Choose Audio only in a media preview, then M4A, MP3, Opus, FLAC or WAV. M4A offers 96–256 kbps, MP3 96–320 kbps, and Opus 64–192 kbps. FLAC/WAV are lossless output formats. Higher bitrate/lossless output cannot improve the original recording or undo source compression.
+- Conversion outputs are isolated from source files so interrupted conversions cannot be selected as the source on retry.
 - Explicit bitrate choices use a real FFmpeg conversion rather than silently stream-copying an already matching codec. Audio format/quality persist across retries/restarts. Compressed-output estimates use duration and target bitrate. Conversion can be canceled.
 - YouTube now appears in Settings → Accounts, with Open YouTube in browser and Import cookies. Import a Netscape cookies.txt export; relevant YouTube/Google domains are retained and expired/unrelated entries removed. Google sign-in is not embedded. Cookies do not guarantee access or bypass DRM/bot checks.
 - TikTok downloads reuse fresh preview info, refresh expired media links once, and attempt one official engine update on recognized page-parser failures. The reported post 7643629243930348831 downloaded here with official stable yt-dlp 2026.10.26 without cookies, producing 720×1280 H.264 video and AAC audio.

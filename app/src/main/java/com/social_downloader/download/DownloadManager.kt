@@ -405,7 +405,8 @@ class DownloadManager(
         }
 
     private fun convertAudio(item: DownloadItem, input: File, directory: File): File {
-        val output = File(directory, "${input.nameWithoutExtension} - audio.${item.audioFormat.extension}")
+        val output = item.audioFormat.outputFile(directory, input)
+        output.parentFile!!.mkdirs()
         val binary = File(app.applicationInfo.nativeLibraryDir, "libffmpeg.so")
         val packages = File(app.noBackupFilesDir, "youtubedl-android/packages")
         val builder = ProcessBuilder(listOf(binary.absolutePath) + item.audioFormat.ffmpegArguments(input.absolutePath, output.absolutePath, item.audioBitrateKbps))
@@ -431,7 +432,7 @@ class DownloadManager(
         }
     }
 
-    private fun findOutput(dir: File, audioOnly: Boolean, audioExtension: String): File? {
+    internal fun findOutput(dir: File, audioOnly: Boolean, audioExtension: String): File? {
         val media = dir.listFiles { f -> f.isFile && f.extension.lowercase() in MEDIA_EXTENSIONS }
             ?.toList().orEmpty()
         val preferred = if (audioOnly) audioExtension else "mp4"
