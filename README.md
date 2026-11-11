@@ -32,9 +32,9 @@ APK: `app/build/outputs/apk/debug/app-debug.apk`.
 
 ## GitHub Actions and releases
 
-`.github/workflows/android.yml` tests, lints and builds on main/work pushes, pull requests and manual dispatch. Download **AnyDown-apk** from the run's artifacts. Push a `v*` tag to publish a GitHub preview release with an installable APK and SHA-256 checksum. The workflow only publishes after checks pass.
+`.github/workflows/android.yml` tests, lints and builds on main/work pushes, pull requests and manual dispatch. Download **AnyDown-apk** from the run's artifacts. Push a `v*` tag to publish a signed GitHub release with an installable APK and SHA-256 checksum. The workflow only publishes after checks pass.
 
-The current workflow deliberately distributes **debug-signed previews**. Different ephemeral CI keys cannot update each other; uninstalling removes private history/cookies and may lose access to previously owned Downloads. Configure a stable private release keystore in GitHub Actions secrets before production distribution. Never commit a private signing key. No production key is included in this repository.
+Release tags require these Actions secrets in the **AnyDown** environment (or repository secrets): `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. The keystore is decoded only into runner temporary storage and removed after signing. Production tags fail clearly if signing is missing. Regular builds still provide a debug APK when secrets are absent. Do not commit private signing material; keep a permanent backup so updates retain the same signing identity. Locally set `ANDROID_KEYSTORE_PATH` plus the three non-Base64 values before `assembleRelease`.
 
 ## Limits and privacy
 

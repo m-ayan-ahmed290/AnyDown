@@ -21,8 +21,11 @@ import java.io.File
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], application = Application::class)
 class StorageUpgradeTest {
-    private val app get() = RuntimeEnvironment.getApplication<Application>()
+    private val app get() = RuntimeEnvironment.getApplication()
     @Before fun prepare() {
+        val cache = androidx.core.content.FileProvider::class.java.getDeclaredField("sCache").apply { isAccessible = true }
+        (cache.get(null) as MutableMap<*, *>).clear()
+        org.robolectric.shadows.ShadowEnvironment.setExternalStoragePublicDirectory(Environment.getExternalStorageDirectory().toPath())
         shadowOf(app).grantPermissions(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         app.getSharedPreferences("settings", 0).edit().clear().commit()
     }
@@ -57,6 +60,19 @@ class StorageUpgradeTest {
         assertEquals("unknown", File(base, "AnyDowns/Other/unknown.mp4").readText())
         assertTrue(StorageMigration.migrate(app, listOf(result)).isEmpty())
         assertTrue(File(result.filePath).exists())
+    }
+
+    @Test fun restoresHistoryAfterProcessDiesBetweenMoveAndHistorySave() {
+        val base = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val source = File(base, "SocialDownloader/recover.mp4")
+        val target = File(base, "AnyDowns/Instagram/recover.mp4").apply { parentFile!!.mkdirs(); writeText("saved") }
+        val item = DownloadItem.fromJson(JSONObject().put("id", "recover").put("url", "https://instagram.com/reel/a")
+            .put("platform", "INSTAGRAM").put("status", "COMPLETED").put("filePath", source.absolutePath))
+        app.getSharedPreferences("storage_migration_paths", 0).edit().putString("recover",
+            JSONObject().put("source", source.absolutePath).put("target", target.absolutePath).toString()).commit()
+        val recovered = StorageMigration.migrate(app, listOf(item)).getValue("recover")
+        assertEquals(target.absolutePath, recovered.filePath)
+        assertTrue(StorageMigration.migrate(app, listOf(recovered)).isEmpty())
     }
 
     @Test fun deniedLegacyPermissionLeavesFilesUntouched() {

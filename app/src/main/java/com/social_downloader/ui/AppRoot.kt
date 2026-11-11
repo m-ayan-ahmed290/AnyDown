@@ -45,6 +45,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -140,41 +141,46 @@ private fun AppScaffold(vm: MainViewModel) {
             })
         },
         bottomBar = {
-            Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, tonalElevation = 2.dp) {
-                Row(Modifier.navigationBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Tab.entries.forEach { tab ->
-                        val selected = vm.tab == tab
-                        val color by animateColorAsState(if (selected) MaterialTheme.colorScheme.primaryContainer
-                            else MaterialTheme.colorScheme.surfaceContainerLow, label = "Tab color")
-                        Surface(modifier = Modifier.weight(1f), color = color, shape = RoundedCornerShape(20.dp)) {
-                            Column(Modifier.selectable(selected, role = Role.Tab, onClick = { vm.tab = tab })
-                                .padding(horizontal = 2.dp, vertical = 10.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                BadgedBox(badge = {
-                                    if (tab == Tab.QUEUE && pendingCount > 0) Badge { Text("$pendingCount") }
-                                }) {
-                                    Icon(tab.icon(), contentDescription = null, modifier = Modifier.size(23.dp),
-                                        tint = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                Text(tab.label, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-                }
-            }
+            AnyDownNavigationBar(vm.tab, pendingCount) { vm.tab = it }
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
             when (vm.tab) {
                 Tab.HOME -> HomeScreen(vm, engineState, onDownload = startDownload, modifier = Modifier.widthIn(max = 760.dp))
-                Tab.QUEUE -> QueueScreen(items, vm)
-                Tab.LIBRARY -> LibraryScreen(items, vm)
-                Tab.HISTORY -> HistoryScreen(items, vm)
-                Tab.SETTINGS -> SettingsScreen(vm)
+                Tab.QUEUE -> QueueScreen(items, vm, Modifier.widthIn(max = 900.dp).fillMaxSize())
+                Tab.LIBRARY -> LibraryScreen(items, vm, Modifier.widthIn(max = 900.dp).fillMaxSize())
+                Tab.HISTORY -> HistoryScreen(items, vm, Modifier.widthIn(max = 900.dp).fillMaxSize())
+                Tab.SETTINGS -> SettingsScreen(vm, Modifier.widthIn(max = 900.dp).fillMaxSize())
+            }
+        }
+    }
+}
+
+@Composable
+internal fun AnyDownNavigationBar(selectedTab: Tab, pendingCount: Int, onSelect: (Tab) -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, tonalElevation = 2.dp) {
+        Row(Modifier.navigationBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Tab.entries.forEach { tab ->
+                val selected = selectedTab == tab
+                val color by animateColorAsState(if (selected) MaterialTheme.colorScheme.primaryContainer
+                    else MaterialTheme.colorScheme.surfaceContainerLow, label = "Tab color")
+                Surface(modifier = Modifier.weight(1f).testTag("tab-surface-${tab.name}"), color = color, shape = RoundedCornerShape(20.dp)) {
+                    Column(Modifier.selectable(selected, role = Role.Tab, onClick = { onSelect(tab) })
+                        .padding(horizontal = 2.dp, vertical = 10.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        BadgedBox(badge = {
+                            if (tab == Tab.QUEUE && pendingCount > 0) Badge { Text("$pendingCount") }
+                        }) {
+                            Icon(tab.icon(), contentDescription = null, modifier = Modifier.size(23.dp),
+                                tint = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text(tab.label, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
         }
     }

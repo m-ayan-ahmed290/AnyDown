@@ -72,17 +72,22 @@ object MediaSaver {
         }
         val base = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
         val dir = if (useSubfolder) File(base, "$SUBFOLDER/${platform.folderName}") else base
-        if (!dir.exists() && !dir.mkdirs()) throw IOException("Couldn't create ${dir.absolutePath}")
+        if (!dir.exists() && !dir.mkdirs() && !dir.isDirectory) throw IOException("Couldn't create ${dir.absolutePath}")
 
         val stem = name.substringBeforeLast('.', name)
         val ext = name.substringAfterLast('.', "")
         var target = File(dir, name)
         var n = 1
-        while (target.exists()) {
+        while (!target.createNewFile()) {
             target = File(dir, if (ext.isEmpty()) "$stem ($n)" else "$stem ($n).$ext")
             n++
         }
-        src.inputStream().use { input -> target.outputStream().use { input.copyTo(it, 256 * 1024) } }
+        try {
+            src.inputStream().use { input -> target.outputStream().use { input.copyTo(it, 256 * 1024) } }
+        } catch (t: Throwable) {
+            target.delete()
+            throw t
+        }
         MediaScannerConnection.scanFile(context, arrayOf(target.absolutePath), arrayOf(mime), null)
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", target)
         return Saved(uri, target.absolutePath, target.name, target.length())

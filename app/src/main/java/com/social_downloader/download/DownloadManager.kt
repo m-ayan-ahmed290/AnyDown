@@ -50,6 +50,7 @@ class DownloadManager(
     private val store = DownloadStore(File(app.filesDir, "downloads.json"))
     private val lock = Any()
     private val jobs = ConcurrentHashMap<String, Job>()
+    private val processIds = ConcurrentHashMap<String, String>()
 
     private val _items = MutableStateFlow(
         store.load()
@@ -66,14 +67,30 @@ class DownloadManager(
     val items: StateFlow<List<DownloadItem>> = _items.asStateFlow()
 
     private val migrationLock = Mutex()
-    private suspend fun migrateStorage() = withContext(Dispatchers.IO) {
+    private val persistenceLock = Mutex()
+    private suspend fun saveCurrent() { persistenceLock.withLock { store.save(_items.value) } }
+    private var migrated = false
+    private val _migrationNotice = MutableStateFlow<String?>(null)
+    val migrationNotice: StateFlow<String?> = _migrationNotice.asStateFlow()
+    private suspend fun migrateStorage(force: Boolean = false) = withContext(Dispatchers.IO) {
         migrationLock.withLock {
-            val result = StorageMigration.migrate(app, _items.value)
-            _items.update { current -> current.map { result[it.id] ?: it } }
-            store.save(_items.value)
+            if (!migrated || force) {
+                _migrationNotice.value = null
+                val result = runCatching {
+                    StorageMigration.migrate(app, _items.value) { _migrationNotice.value = it }
+                }.getOrElse {
+                    _migrationNotice.value = "Some old downloads couldn't be organized. Retry migration, or use your file manager."
+                    emptyMap()
+                }
+                _items.update { current -> current.map { item ->
+                    result[item.id]?.let { item.copy(fileUri = it.fileUri, filePath = it.filePath, fileName = it.fileName) } ?: item
+                } }
+                if (result.isNotEmpty()) saveCurrent()
+                migrated = _migrationNotice.value == null
+            }
         }
     }
-    fun retryStorageMigration() { scope.launch { migrateStorage() } }
+    fun retryStorageMigration() { scope.launch { migrateStorage(force = true) } }
 
     init {
         retryStorageMigration()
@@ -118,6 +135,10 @@ class DownloadManager(
     fun retry(id: String) {
         val item = find(id) ?: return
         if (item.status != DownloadStatus.FAILED && item.status != DownloadStatus.CANCELED) return
+        if (jobs.containsKey(id)) {
+            scope.launch { jobs[id]?.join(); retry(id) }
+            return
+        }
         update(id) {
             it.copy(
                 status = DownloadStatus.QUEUED, progress = -1f, etaSeconds = -1, error = null,
@@ -141,7 +162,10 @@ class DownloadManager(
         }
         persist()
         if (wasActive) {
-            scope.launch(Dispatchers.IO) { runCatching { YoutubeDL.getInstance().destroyProcessById(id) } }
+            val processId = processIds[id]
+            if (processId != null) scope.launch(Dispatchers.IO) {
+                runCatching { YoutubeDL.getInstance().destroyProcessById(processId) }
+            }
         }
     }
 
@@ -190,6 +214,8 @@ class DownloadManager(
 
     private suspend fun run(id: String) {
         val item = find(id) ?: return
+        val processId = "$id-${UUID.randomUUID()}"
+        processIds[id] = processId
         val tmpDir = File(app.cacheDir, "dl/$id")
         val cookieFile = cookies.tempCopy(item.platform)
         try {
@@ -210,7 +236,7 @@ class DownloadManager(
             var lastEmit = 0L
             var lastSpeed = -1L
 
-            YoutubeDL.getInstance().execute(request, id, false) { _, eta, line ->
+            YoutubeDL.getInstance().execute(request, processId, false) { _, eta, line ->
                 if (line.startsWith("[download] Destination:")) {
                     streamIdx++
                 } else if (isPostProcessing(line)) {
@@ -278,6 +304,7 @@ class DownloadManager(
         } catch (e: Throwable) {
             fail(id, ErrorMapper.map(e.message, item.platform, cookies.has(item.platform)))
         } finally {
+            processIds.remove(id, processId)
             cookieFile?.delete()
             tmpDir.deleteRecursively()
         }
@@ -294,8 +321,8 @@ class DownloadManager(
             addOption("--fragment-retries", "5")
             addOption("--socket-timeout", "30")
             addOption("--concurrent-fragments", settings.fragments.value.toString())
-            addOption("--retry-sleep", "exp=1:10")
-            addOption("--fragment-retry-sleep", "exp=1:10")
+            addOption("--retry-sleep", "http:exp=1:10")
+            addOption("--retry-sleep", "fragment:exp=1:10")
             addOption("--buffer-size", "64K")
             addOption("-o", "${dir.absolutePath}/%(title).100B.%(ext)s")
             if (item.audioOnly) {
@@ -350,7 +377,7 @@ class DownloadManager(
     }
 
     private fun persist() {
-        scope.launch(Dispatchers.IO) { store.save(_items.value) }
+        scope.launch(Dispatchers.IO) { saveCurrent() }
     }
 
     private companion object {

@@ -54,6 +54,7 @@ import com.social_downloader.engine.UpdateChannel
 
 @Composable
 fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
+    val migrationNotice by vm.downloads.migrationNotice.collectAsStateWithLifecycle()
     val s = vm.settings
     val theme by s.themeMode.collectAsStateWithLifecycle()
     val dynamic by s.dynamicColor.collectAsStateWithLifecycle()
@@ -110,6 +111,13 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                 if (subfolder) "Downloads/${MediaSaver.SUBFOLDER}/<Website>" else "Downloads",
                 subfolder, s::setUseSubfolder,
             )
+        }
+
+        Section("Storage upgrade") {
+            Text("Old SocialDownloader files are moved into AnyDowns by website. Files from another app or installation may need to be moved with your file manager.",
+                style = MaterialTheme.typography.bodySmall)
+            migrationNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+            TextButton(onClick = vm.downloads::retryStorageMigration) { Text("Retry folder migration") }
         }
 
         Section("Accounts") {
