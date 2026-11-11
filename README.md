@@ -41,3 +41,13 @@ Release tags require these Actions secrets in the **AnyDown** environment (or re
 Site coverage follows yt-dlp, not the presence of a directory entry. Some links require your own signed-in session, regional access or an engine update. No DRM bypass. Playlists/profiles and live streams are not supported. Google blocks embedded sign-in, so YouTube login is not provided. The app stores cookies privately and does not use a download backend or analytics. Actual download speeds depend on the source, network and device; no speed guarantee.
 
 Only download media you have permission to save. GPL-3.0; see LICENSE.
+
+## Account and recovery improvements in 2.1
+
+Account actions expand on demand. Embedded login no longer clears sessions during loading, shows loading/errors/reload and offers Open browser. Google OAuth is blocked with guidance because providers can reject embedded browsers. External browser sessions are not automatically accessible; import a Netscape cookies.txt export. Imports retain only current cookies for the selected site. Cookies saved does not mean a server-verified account.
+
+With Show adult sites enabled, the final Settings section provides adult account sign-in/cookie import. Six more adult platforms are recognized; actual availability is controlled by yt-dlp and the site.
+
+If automatic migration missed old files, use Settings → Storage upgrade → Import old downloads. Choose multiple media files using Android's picker and optionally choose their website folder. Copies appear in AnyDowns and Library; originals remain untouched. The UI reports imported/skipped/failed counts and skips previously imported URIs while the saved copy exists. After uninstall, platform metadata may be unavailable; choose a folder explicitly or use Other. Copying requires space for staging and destination files. This is an explicit recovery path rather than a claim that Android grants silent access to another installation's files.
+
+Signed work-branch builds now publish a release when versionName has no existing release. Existing releases are never overwritten. Tag-triggered releases remain available.

@@ -99,6 +99,37 @@ class DownloadManager(
 
     // ---------------------------------------------------------------- public API
 
+    /** Explicit document access works for files whose MediaStore ownership was lost on uninstall. */
+    @Synchronized
+    fun importOldFile(uri: android.net.Uri, selectedSite: com.social_downloader.engine.Platform = com.social_downloader.engine.Platform.OTHER): Boolean {
+        val prefs = app.getSharedPreferences("imported_files", Context.MODE_PRIVATE)
+        val prior = prefs.getString(uri.toString(), null)
+        if (prior != null && MediaSaver.exists(app, prior, null)) return false
+        val name = app.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { if (it.moveToFirst()) it.getString(0) else null } ?: "imported-video.mp4"
+        val known = _items.value.firstOrNull { it.fileName == name }
+        val site = selectedSite.takeIf { it != com.social_downloader.engine.Platform.OTHER } ?: known?.let { com.social_downloader.engine.UrlTools.detect(it.url).takeIf { p -> p != com.social_downloader.engine.Platform.OTHER } ?: it.platform }
+            ?: com.social_downloader.engine.Platform.OTHER
+        val dir = File(app.cacheDir, "import-${UUID.randomUUID()}").apply { mkdirs() }
+        try {
+            val temp = File(dir, MediaSaver.sanitize(name))
+            app.contentResolver.openInputStream(uri)?.use { input -> temp.outputStream().use { input.copyTo(it, 256 * 1024) } }
+                ?: throw java.io.IOException("Couldn't read selected file")
+            val mime = app.contentResolver.getType(uri) ?: MediaSaver.mimeFor(temp)
+            val saved = MediaSaver.save(app, temp, mime, true, site)
+            val item = DownloadItem.fromJson(org.json.JSONObject()
+                .put("id", UUID.randomUUID().toString()).put("url", known?.url ?: uri.toString())
+                .put("title", known?.title ?: name).put("platform", site.name).put("status", "COMPLETED")
+                .put("qualityLabel", "Imported").put("fileUri", saved.uri.toString())
+                .put("filePath", saved.path).put("fileName", saved.displayName).put("mimeType", mime)
+                .put("sizeBytes", saved.sizeBytes).put("createdAt", System.currentTimeMillis()).put("finishedAt", System.currentTimeMillis()))
+            _items.update { listOf(item) + it }
+            persist()
+            prefs.edit().putString(uri.toString(), saved.uri.toString()).commit()
+            return true
+        } finally { dir.deleteRecursively() }
+    }
+
     fun enqueue(info: MediaInfo, quality: QualityOption): String {
         val item = DownloadItem(
             id = UUID.randomUUID().toString(),

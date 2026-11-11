@@ -75,6 +75,20 @@ class StorageUpgradeTest {
         assertTrue(StorageMigration.migrate(app, listOf(recovered)).isEmpty())
     }
 
+    @Test fun documentImportKeepsOriginalAndSkipsRepeatedSelection() {
+        val base = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val original = File(base, "OldInstallation/import.mp4").apply { parentFile!!.mkdirs(); writeText("video bytes") }
+        val uri = androidx.core.content.FileProvider.getUriForFile(app, "${app.packageName}.fileprovider", original)
+        val cookies = com.social_downloader.data.CookieStore(app)
+        val manager = com.social_downloader.download.DownloadManager(app,
+            com.social_downloader.engine.YtDlpEngine(app, cookies), SettingsStore(app), cookies)
+        assertTrue(manager.importOldFile(uri))
+        val saved = manager.items.value.first()
+        assertEquals("video bytes", File(saved.filePath!!).readText())
+        assertEquals("video bytes", original.readText())
+        assertFalse(manager.importOldFile(uri))
+    }
+
     @Test fun deniedLegacyPermissionLeavesFilesUntouched() {
         shadowOf(app).denyPermissions(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         val base = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)

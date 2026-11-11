@@ -69,6 +69,12 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     val signedIn by vm.cookies.signedIn.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var importFor by remember { mutableStateOf<Platform?>(null) }
+    var importSite by remember { mutableStateOf(Platform.OTHER) }
+    var folderMenu by remember { mutableStateOf(false) }
+    val oldFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { vm.importOldDownloads(it, importSite) }
+    val importPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) oldFiles.launch(arrayOf("video/*", "audio/*")) else vm.say("Storage permission is required to save imports on Android 9.")
+    }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         val p = importFor
         if (uri != null && p != null) vm.importCookies(context, p, uri)
@@ -114,47 +120,32 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
         }
 
         Section("Storage upgrade") {
-            Text("Old SocialDownloader files are moved into AnyDowns by website. Files from another app or installation may need to be moved with your file manager.",
+            Text("Recover old downloads into AnyDowns. Choose a website folder if the old app's history is gone.",
                 style = MaterialTheme.typography.bodySmall)
             migrationNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+            Text("If you uninstalled the old app, choose its files below to grant access. Select multiple videos or audio files. Unknown sites go into Other; originals stay untouched.", style = MaterialTheme.typography.bodySmall)
+            androidx.compose.foundation.layout.Box {
+                TextButton(onClick = { folderMenu = true }, enabled = !vm.importing) { Text("Folder: ${if (importSite == Platform.OTHER) "Auto / Other" else importSite.folderName}") }
+                androidx.compose.material3.DropdownMenu(expanded = folderMenu, onDismissRequest = { folderMenu = false }, modifier = Modifier.height(240.dp)) {
+                    (listOf(Platform.OTHER) + Platform.directory(showAdultSites)).forEach { site ->
+                        androidx.compose.material3.DropdownMenuItem(text = { Text(if (site == Platform.OTHER) "Auto / Other" else site.label) },
+                            onClick = { importSite = site; folderMenu = false })
+                    }
+                }
+            }
+            Button(onClick = {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q && androidx.core.content.ContextCompat.checkSelfPermission(context,
+                        android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                    importPermission.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                else oldFiles.launch(arrayOf("video/*", "audio/*"))
+            }, enabled = !vm.importing) { Text(if (vm.importing) "Importing…" else "Import old downloads") }
+            vm.importStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             TextButton(onClick = vm.downloads::retryStorageMigration) { Text("Retry folder migration") }
         }
 
         Section("Accounts") {
-            Text(
-                "Some sites only show certain videos to signed-in users. Sign in with your OWN account and the " +
-                    "app can fetch what you could already watch there. Only session cookies are kept, privately " +
-                    "on this device, and they're only sent to that site. Private posts you can't view yourself " +
-                    "stay blocked. Tip: use a secondary account — sites may limit accounts that download a lot.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            SiteLogin.all.forEach { site ->
-                val isIn = site.platform in signedIn
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(site.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                        Text(
-                            if (isIn) "Signed in" else "Not signed in",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (isIn) MaterialTheme.colorScheme.secondary
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { vm.loginSite = site }) { Text(if (isIn) "Sign in again" else "Sign in") }
-                        TextButton(onClick = { importFor = site.platform; picker.launch(arrayOf("*/*")) }) {
-                            Text("Import cookies.txt")
-                        }
-                        if (isIn) TextButton(onClick = { vm.signOut(site.platform) }) { Text("Sign out") }
-                    }
-                }
-            }
-            Text(
-                "YouTube is not offered: Google blocks in-app sign-in.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Text("Use a site's own email/username login. Google and other social sign-ins may block embedded browsers. For those, sign in in your browser and import a Netscape cookies.txt export.", style = MaterialTheme.typography.bodySmall)
+            AccountList(SiteLogin.all, vm, signedIn) { importFor = it; picker.launch(arrayOf("*/*")) }
         }
 
         Section("Download engine") {
@@ -208,6 +199,10 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        if (showAdultSites) Section("Adult site accounts") {
+            Text("Optional. Cookie import also works when embedded sign-in is blocked.", style = MaterialTheme.typography.bodySmall)
+            AccountList(SiteLogin.adult, vm, signedIn) { importFor = it; picker.launch(arrayOf("*/*")) }
+        }
         Spacer(Modifier.height(8.dp))
     }
 }
@@ -250,6 +245,22 @@ private fun Choice(options: List<String>, selectedIndex: Int, onSelect: (Int) ->
                 onClick = { onSelect(index) },
                 shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
             ) { Text(label) }
+        }
+    }
+}
+
+@Composable
+private fun AccountList(sites: List<SiteLogin>, vm: MainViewModel, saved: Set<Platform>, import: (Platform) -> Unit) {
+    var expanded by remember { mutableStateOf<Platform?>(null) }
+    sites.forEach { site ->
+        TextButton(onClick = { expanded = if (expanded == site.platform) null else site.platform }, modifier = Modifier.fillMaxWidth()) {
+            Text(site.label, modifier = Modifier.weight(1f))
+            Text(if (site.platform in saved) "Cookies saved" else "Set up")
+        }
+        if (expanded == site.platform) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { vm.loginSite = site }) { Text("Sign in") }
+            TextButton(onClick = { import(site.platform) }) { Text("Import cookies") }
+            if (site.platform in saved) TextButton(onClick = { vm.signOut(site.platform) }) { Text("Remove cookies") }
         }
     }
 }

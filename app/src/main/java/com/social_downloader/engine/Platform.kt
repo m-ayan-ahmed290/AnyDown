@@ -1,7 +1,7 @@
 package com.social_downloader.engine
 
 /** Sites we recognise by hostname. Anything else is still attempted through yt-dlp's 1000+ extractors. */
-enum class Platform(val label: String, val brandColor: Long, private val hosts: List<String>, val adult: Boolean = false) {
+enum class Platform(val label: String, val brandColor: Long, val hosts: List<String>, val adult: Boolean = false) {
     YOUTUBE("YouTube", 0xFFFF0033, listOf("youtube.com", "youtu.be", "youtube-nocookie.com")),
     X("X (Twitter)", 0xFF1D9BF0, listOf("twitter.com", "x.com", "t.co", "fxtwitter.com", "vxtwitter.com")),
     REDDIT("Reddit", 0xFFFF4500, listOf("reddit.com", "redd.it")),
@@ -28,6 +28,12 @@ enum class Platform(val label: String, val brandColor: Long, private val hosts: 
     XVIDEOS("XVideos", 0xFFEF8B32, listOf("xvideos.com"), adult = true),
     XNXX("XNXX", 0xFFEF8B32, listOf("xnxx.com"), adult = true),
     XHAMSTER("xHamster", 0xFFEF8B32, listOf("xhamster.com"), adult = true),
+    EPORNER("Eporner", 0xFFEF8B32, listOf("eporner.com"), adult = true),
+    SPANKBANG("SpankBang", 0xFFEF8B32, listOf("spankbang.com"), adult = true),
+    YOUPORN("YouPorn", 0xFFEF8B32, listOf("youporn.com"), adult = true),
+    REDTUBE("RedTube", 0xFFEF8B32, listOf("redtube.com"), adult = true),
+    TUBE8("Tube8", 0xFFEF8B32, listOf("tube8.com"), adult = true),
+    BEEG("Beeg", 0xFFEF8B32, listOf("beeg.com"), adult = true),
     OTHER("Other site", 0xFF7B7F93, emptyList());
 
     val folderName: String get() = when (this) {

@@ -70,6 +70,7 @@ fun HomeScreen(
     val showAdultSites by vm.settings.showAdultSites.collectAsStateWithLifecycle()
     val downloads by vm.downloads.items.collectAsStateWithLifecycle()
     val organized by vm.settings.useSubfolder.collectAsStateWithLifecycle()
+    var browseSites by remember { mutableStateOf(false) }
     val focus = LocalFocusManager.current
     val state = vm.fetchState
 
@@ -79,21 +80,12 @@ fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                shape = RoundedCornerShape(28.dp)) {
-                Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("SAVE WHAT MOVES YOU", style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Text("One link.\nYours to keep.", style = MaterialTheme.typography.headlineLarge,
-                        fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Text("Videos & audio, neatly organized on your device.",
-                        color = MaterialTheme.colorScheme.onPrimaryContainer, style = MaterialTheme.typography.bodyMedium)
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Text("${downloads.count { it.status == DownloadStatus.COMPLETED }} saved", style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer)
-                        Text("${downloads.count { it.status.isPending }} in queue", style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Save a video or audio", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("Paste a link or share one from another app.", style = MaterialTheme.typography.bodyMedium)
+                Row {
+                    TextButton(onClick = { vm.tab = Tab.LIBRARY }) { Text("${downloads.count { it.status == DownloadStatus.COMPLETED }} saved") }
+                    TextButton(onClick = { vm.tab = Tab.QUEUE }) { Text("${downloads.count { it.status.isPending }} in queue") }
                 }
             }
         }
@@ -115,7 +107,8 @@ fun HomeScreen(
         }
 
         if (state is FetchState.Idle) {
-            item { SupportedSitesCard(showAdultSites) }
+            item { TextButton(onClick = { browseSites = !browseSites }) { Text(if (browseSites) "Hide website directory" else "Browse supported websites") } }
+            if (browseSites) item { SupportedSitesCard(showAdultSites) }
         }
     }
 }

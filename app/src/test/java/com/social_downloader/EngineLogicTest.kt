@@ -175,3 +175,27 @@ class CookieAndSpeedTest {
         assertEquals(512000L, com.social_downloader.util.Format.parseSpeed("at 500.00KiB/s"))
     }
 }
+
+class AccountCookieTest {
+    @Test fun scopesImportsAndKeepsHttpOnlySessionCookies() {
+        val text = "#HttpOnly_.instagram.com\tTRUE\t/\tTRUE\t0\tsessionid\tsecret\n" +
+            ".evil.org\tTRUE\t/\tTRUE\t0\tsessionid\tunrelated\n" +
+            ".instagram.com\tTRUE\t/\tTRUE\t1\tstale\told\n"
+        val scoped = com.social_downloader.engine.CookieFile.forPlatform(text, Platform.INSTAGRAM, 100)!!
+        assertTrue(scoped.contains("#HttpOnly_"))
+        assertFalse(scoped.contains("unrelated"))
+        assertFalse(scoped.contains("stale"))
+        assertTrue(com.social_downloader.engine.CookieFile.hasSession(scoped, Platform.INSTAGRAM))
+        assertNull(com.social_downloader.engine.CookieFile.forPlatform(text, Platform.REDDIT, 100))
+    }
+    @Test fun anonymousCookiesAreNotAnInstagramLogin() {
+        val text = com.social_downloader.engine.CookieFile.build(mapOf(".instagram.com" to "csrftoken=anonymous"), 9999999999)!!
+        assertFalse(com.social_downloader.engine.CookieFile.hasSession(text, Platform.INSTAGRAM))
+    }
+    @Test fun adultAccountsAreCompleteAndSeparate() {
+        val adult = com.social_downloader.engine.SiteLogin.adult
+        assertEquals(Platform.named.filter { it.adult }.toSet(), adult.map { it.platform }.toSet())
+        assertTrue(com.social_downloader.engine.SiteLogin.all.none { it.platform.adult })
+        assertEquals(Platform.EPORNER, UrlTools.detect("https://www.eporner.com/video-test"))
+    }
+}

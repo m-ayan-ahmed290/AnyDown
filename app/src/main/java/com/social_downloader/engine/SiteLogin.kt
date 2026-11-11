@@ -27,7 +27,7 @@ data class SiteLogin(
             ),
             SiteLogin(
                 Platform.THREADS, "https://www.threads.net/login",
-                listOf("https://www.threads.net" to ".threads.net", "https://www.threads.com" to ".threads.com"),
+                listOf("https://www.threads.net" to ".threads.net", "https://www.threads.com" to ".threads.com", "https://www.instagram.com" to ".instagram.com"),
             ),
             SiteLogin(
                 Platform.TIKTOK, "https://www.tiktok.com/login",
@@ -39,6 +39,11 @@ data class SiteLogin(
             ),
         )
 
-        fun forPlatform(p: Platform): SiteLogin? = all.firstOrNull { it.platform == p }
+        val adult: List<SiteLogin> get() = Platform.named.filter { it.adult }.map { platform ->
+            val host = platform.hosts.first()
+            SiteLogin(platform, "https://www.$host/", platform.hosts.map { "https://www.$it" to ".$it" })
+        }
+
+        fun forPlatform(p: Platform): SiteLogin? = (all + adult).firstOrNull { it.platform == p }
     }
 }

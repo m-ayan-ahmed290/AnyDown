@@ -182,11 +182,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun saveCookies(platform: Platform, text: String) {
         cookies.save(platform, text)
-        say("Signed in to ${platform.label}. Try your link again.")
+        say("Cookies saved for ${platform.label}. Try your link again.")
     }
 
     fun signOut(platform: Platform) {
         cookies.clear(platform)
+        android.webkit.CookieManager.getInstance().removeAllCookies(null)
+        android.webkit.CookieManager.getInstance().flush()
         say("Signed out of ${platform.label}.")
     }
 
@@ -216,8 +218,33 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             if (text == null || !CookieFile.looksValid(text)) {
                 say("That doesn't look like a valid cookies.txt (Netscape format, under 2 MB).")
             } else {
-                saveCookies(platform, text)
+                val scoped = CookieFile.forPlatform(text, platform)
+                if (scoped == null) say("No current cookies for ${platform.label} found in that file.")
+                else saveCookies(platform, scoped)
             }
+        }
+    }
+
+    var importStatus by mutableStateOf<String?>(null)
+        private set
+    var importing by mutableStateOf(false)
+        private set
+    fun importOldDownloads(uris: List<Uri>, site: Platform = Platform.OTHER) {
+        if (importing || uris.isEmpty()) return
+        importing = true
+        viewModelScope.launch {
+            var copied = 0; var skipped = 0; var failed = 0
+            try {
+                uris.forEachIndexed { index, uri ->
+                    importStatus = "Importing ${index + 1} of ${uris.size}…"
+                    try {
+                        val added = withContext(Dispatchers.IO) { downloads.importOldFile(uri, site) }
+                        if (added) copied++ else skipped++
+                    } catch (e: CancellationException) { throw e }
+                    catch (_: Exception) { failed++ }
+                }
+                importStatus = "$copied imported · $skipped already imported · $failed failed. Originals kept."
+            } finally { importing = false }
         }
     }
 
