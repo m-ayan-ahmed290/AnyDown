@@ -89,6 +89,18 @@ class StorageUpgradeTest {
         assertFalse(manager.importOldFile(uri))
     }
 
+    @Test fun persistedAudioSettingsSurviveRetryAndOldHistoryUsesM4a() {
+        val json = JSONObject().put("id", "audio").put("url", "https://youtube.com/watch?v=test")
+            .put("platform", "YOUTUBE").put("audioOnly", true).put("status", "FAILED")
+        val old = DownloadItem.fromJson(json)
+        assertEquals(com.social_downloader.engine.AudioFormat.M4A, old.audioFormat)
+        assertNull(old.audioBitrateKbps)
+        val selected = old.copy(audioFormat = com.social_downloader.engine.AudioFormat.MP3, audioBitrateKbps = 320)
+        val restored = DownloadItem.fromJson(selected.toJson())
+        assertEquals(com.social_downloader.engine.AudioFormat.MP3, restored.audioFormat)
+        assertEquals(320, restored.audioBitrateKbps)
+    }
+
     @Test fun deniedLegacyPermissionLeavesFilesUntouched() {
         shadowOf(app).denyPermissions(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         val base = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)

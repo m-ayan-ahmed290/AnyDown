@@ -16,6 +16,8 @@ data class QualityOption(
     /** True when the best matching video stream has no audio and must be merged with an audio stream. */
     val needsMerge: Boolean,
     val estimatedBytes: Long?,
+    val audioFormat: AudioFormat = AudioFormat.M4A,
+    val audioBitrateKbps: Int? = null,
 )
 
 data class MediaInfo(

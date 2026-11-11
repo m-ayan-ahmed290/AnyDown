@@ -199,3 +199,26 @@ class AccountCookieTest {
         assertEquals(Platform.EPORNER, UrlTools.detect("https://www.eporner.com/video-test"))
     }
 }
+
+class AudioAndYouTubeTest {
+    @Test fun bitrateSelectionsForceEncodingAndRemoveVideo() {
+        val args = com.social_downloader.engine.AudioFormat.MP3.ffmpegArguments("/input.mp4", "/output.mp3", 320)
+        assertTrue(args.containsAll(listOf("-vn", "-map", "0:a:0", "libmp3lame", "320k")))
+        assertFalse(args.contains("copy"))
+        assertEquals(192, com.social_downloader.engine.AudioFormat.MP3.validBitrate(9999))
+        assertNull(com.social_downloader.engine.AudioFormat.FLAC.validBitrate(320))
+        assertFalse(com.social_downloader.engine.AudioFormat.FLAC.ffmpegArguments("in", "out.flac", 320).contains("-b:a"))
+    }
+    @Test fun youtubeImportsGoogleAndYoutubeCookiesButNotLookalikeDomains() {
+        val text = com.social_downloader.engine.CookieFile.build(mapOf(
+            ".youtube.com" to "SAPISID=yt", ".google.com" to "SID=google",
+            ".google.com.evil.org" to "SID=foreign", ".notgoogle.com" to "SID=unrelated"), 9999999999)!!
+        val scoped = com.social_downloader.engine.CookieFile.forPlatform(text, Platform.YOUTUBE)!!
+        assertTrue(scoped.contains("SAPISID"))
+        assertTrue(scoped.contains("SID\tgoogle"))
+        assertFalse(scoped.contains("foreign"))
+        assertFalse(scoped.contains("unrelated"))
+        val site = com.social_downloader.engine.SiteLogin.all.single { it.platform == Platform.YOUTUBE }
+        assertFalse(site.embeddedLogin)
+    }
+}

@@ -341,8 +341,8 @@ fun LibraryScreen(
     if (allVideos.isEmpty()) {
         EmptyState(
             icon = Icons.Rounded.VideoLibrary,
-            title = "No downloaded videos",
-            subtitle = "Videos you download appear here, and you can play, share or delete them.",
+            title = "Your library is empty",
+            subtitle = "Audio and video downloads appear here. Play, share or delete them.",
             modifier = modifier,
         )
         return
@@ -377,7 +377,7 @@ fun LibraryScreen(
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "${videos.size} video${if (videos.size == 1) "" else "s"} · ${Format.bytes(totalBytes)}",
+                    "${videos.size} file${if (videos.size == 1) "" else "s"} · ${Format.bytes(totalBytes)}",
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.weight(1f),
                 )
@@ -440,7 +440,7 @@ fun LibraryScreen(
     toDelete?.let { item ->
         AlertDialog(
             onDismissRequest = { toDelete = null },
-            title = { Text(if (item.id in missing) "Remove entry?" else "Delete video?") },
+            title = { Text(if (item.id in missing) "Remove entry?" else "Delete file?") },
             text = {
                 Text(
                     if (item.id in missing) "The file is already gone; this removes it from the list."

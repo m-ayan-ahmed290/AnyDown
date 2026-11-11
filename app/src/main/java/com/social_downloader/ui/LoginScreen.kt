@@ -101,7 +101,7 @@ fun LoginScreen(site: SiteLogin, vm: MainViewModel) {
             }
             androidx.compose.foundation.layout.Row {
                 TextButton(onClick = { holder[0]?.reload(); error = null }) { Text("Reload") }
-                TextButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(site.loginUrl))) }) { Text("Open browser") }
+                TextButton(onClick = { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_VIEW, Uri.parse(site.loginUrl)), "Choose a browser")) }) { Text("Open browser") }
             }
             error?.let { Text(it, modifier = Modifier.padding(12.dp), color = MaterialTheme.colorScheme.error) }
             if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())

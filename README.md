@@ -38,7 +38,7 @@ Release tags require these Actions secrets in the **AnyDown** environment (or re
 
 ## Limits and privacy
 
-Site coverage follows yt-dlp, not the presence of a directory entry. Some links require your own signed-in session, regional access or an engine update. No DRM bypass. Playlists/profiles and live streams are not supported. Google blocks embedded sign-in, so YouTube login is not provided. The app stores cookies privately and does not use a download backend or analytics. Actual download speeds depend on the source, network and device; no speed guarantee.
+Site coverage follows yt-dlp, not the presence of a directory entry. Some links require your own signed-in session, regional access or an engine update. No DRM bypass. Playlists/profiles and live streams are not supported. Google blocks embedded sign-in; YouTube supports browser cookie import. The app stores cookies privately and does not use a download backend or analytics. Actual download speeds depend on the source, network and device; no speed guarantee.
 
 Only download media you have permission to save. GPL-3.0; see LICENSE.
 
@@ -55,3 +55,9 @@ Signed work-branch builds now publish a release when versionName has no existing
 ## TikTok recovery in 2.1.1
 
 TikTok preview extraction now writes complete info JSON into a short-lived private snapshot. A download loads this info instead of repeating the page request. Snapshots expire after five minutes, and changing TikTok cookies clears them. Missing/expired snapshots are re-extracted. A stale media URL (403/410) gets one fresh extraction and retry. Recognized TikTok parser failures attempt one official engine update per app session using the selected update channel. Access restrictions and rate limits do not trigger automatic updates. The UI gives a short update/retry instruction instead of the upstream issue-report dump.
+
+## Audio downloads and YouTube cookies in 2.2
+
+Choose Audio only in a media preview, then select M4A (96/128/192/256 kbps), MP3 (96/128/192/256/320 kbps), Opus (64/96/128/160/192 kbps), FLAC or WAV. Lossy bitrate choices run an explicit bundled-FFmpeg conversion so an already matching source codec cannot silently ignore the requested bitrate. Format/quality persist in history for retry after process restarts. FLAC/WAV are lossless output formats; they do not restore detail lost in the original source. Audio conversion supports cancellation. File-size estimates for compressed audio use the target bitrate and duration.
+
+Settings → Accounts → YouTube → Import cookies accepts Netscape cookies.txt exports. YouTube/Google cookies are scoped to YouTube/Google domains; unrelated domains and expired cookies are removed. Google sign-in stays in the user's browser. Cookie import does not bypass DRM, region restrictions, bot checks or access limits.

@@ -39,6 +39,8 @@ data class DownloadItem(
     val finishedAt: Long,
     /** Current speed in bytes/s while downloading; -1 when unknown. Not persisted. */
     val speedBytes: Long = -1,
+    val audioFormat: com.social_downloader.engine.AudioFormat = com.social_downloader.engine.AudioFormat.M4A,
+    val audioBitrateKbps: Int? = null,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
@@ -50,6 +52,8 @@ data class DownloadItem(
         put("qualityLabel", qualityLabel)
         put("heightCap", heightCap ?: JSONObject.NULL)
         put("audioOnly", audioOnly)
+        put("audioFormat", audioFormat.name)
+        put("audioBitrateKbps", audioBitrateKbps ?: JSONObject.NULL)
         put("expectedStreams", expectedStreams)
         put("extractorArgs", extractorArgs ?: JSONObject.NULL)
         put("status", status.name)
@@ -77,6 +81,8 @@ data class DownloadItem(
             qualityLabel = o.optString("qualityLabel", ""),
             heightCap = if (o.isNull("heightCap")) null else o.optInt("heightCap"),
             audioOnly = o.optBoolean("audioOnly", false),
+            audioFormat = runCatching { com.social_downloader.engine.AudioFormat.valueOf(o.optString("audioFormat", "M4A")) }.getOrDefault(com.social_downloader.engine.AudioFormat.M4A),
+            audioBitrateKbps = if (o.isNull("audioBitrateKbps") || !o.has("audioBitrateKbps")) null else o.optInt("audioBitrateKbps"),
             expectedStreams = o.optInt("expectedStreams", 1),
             extractorArgs = o.str("extractorArgs"),
             status = runCatching { DownloadStatus.valueOf(o.getString("status")) }

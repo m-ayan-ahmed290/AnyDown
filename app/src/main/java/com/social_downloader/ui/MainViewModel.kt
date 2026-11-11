@@ -108,7 +108,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val check = UrlTools.check(input)
         val url = check.url
         if (url == null) {
-            fetchState = FetchState.Error(check.error ?: "Paste a video link first.")
+            fetchState = FetchState.Error(check.error ?: "Paste a media link first.")
             return
         }
         fetchJob?.cancel()
@@ -130,7 +130,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun selectQuality(q: QualityOption) {
-        selectedQuality = q
+        selectedQuality = if (q.audioOnly) q.copy(audioBitrateKbps = q.audioFormat.validBitrate(q.audioBitrateKbps), estimatedBytes = null) else q
+    }
+
+    fun selectAudioFormat(format: com.social_downloader.engine.AudioFormat) {
+        val q = selectedQuality?.takeIf { it.audioOnly } ?: return
+        selectedQuality = q.copy(audioFormat = format, audioBitrateKbps = format.defaultBitrate, estimatedBytes = null)
+    }
+    fun selectAudioBitrate(bitrate: Int) {
+        val q = selectedQuality?.takeIf { it.audioOnly } ?: return
+        selectedQuality = q.copy(audioBitrateKbps = q.audioFormat.validBitrate(bitrate), estimatedBytes = null)
     }
 
     fun download() {
@@ -173,7 +182,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 .putExtra(Intent.EXTRA_STREAM, Uri.parse(item.fileUri))
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             try {
-                context.startActivity(Intent.createChooser(send, "Share video"))
+                context.startActivity(Intent.createChooser(send, "Share media"))
             } catch (_: ActivityNotFoundException) {
                 say("No app available to share with.")
             }

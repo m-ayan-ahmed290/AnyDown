@@ -102,6 +102,8 @@ fun HomeScreen(
                     onSelect = vm::selectQuality,
                     onDownload = onDownload,
                     organized = organized,
+                    onAudioFormat = vm::selectAudioFormat,
+                    onAudioBitrate = vm::selectAudioBitrate,
                 )
             }
         }
@@ -128,7 +130,7 @@ private fun UrlInputCard(vm: MainViewModel, focus: FocusManager) {
                 value = vm.input,
                 onValueChange = vm::onInputChange,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Video link") },
+                label = { Text("Media link") },
                 placeholder = { Text("Paste a link…") },
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Rounded.Link, contentDescription = null) },
@@ -182,7 +184,7 @@ private fun LoadingCard(engineState: EngineState) {
         ) {
             CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
             Column {
-                Text("Fetching video info…", style = MaterialTheme.typography.titleSmall)
+                Text("Fetching media details…", style = MaterialTheme.typography.titleSmall)
                 if (engineState is EngineState.Initializing) {
                     Text(
                         "Preparing the download engine (first launch only)",
@@ -226,6 +228,8 @@ private fun PreviewCard(
     onSelect: (QualityOption) -> Unit,
     onDownload: () -> Unit,
     organized: Boolean,
+    onAudioFormat: (com.social_downloader.engine.AudioFormat) -> Unit,
+    onAudioBitrate: (Int) -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -280,7 +284,28 @@ private fun PreviewCard(
                 }
             }
 
-            val size = selected?.estimatedBytes?.let { "≈ ${Format.bytes(it)}" }
+            if (selected?.audioOnly == true) {
+                Text("Audio format", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    com.social_downloader.engine.AudioFormat.entries.forEach { format ->
+                        FilterChip(selected = selected.audioFormat == format, onClick = { onAudioFormat(format) }, label = { Text(format.label) })
+                    }
+                }
+                if (!selected.audioFormat.lossless) {
+                    Text("Audio quality", style = MaterialTheme.typography.labelLarge)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        selected.audioFormat.bitrates.forEach { bitrate ->
+                            FilterChip(selected = selected.audioBitrateKbps == bitrate, onClick = { onAudioBitrate(bitrate) }, label = { Text("$bitrate kbps") })
+                        }
+                    }
+                }
+                Text(if (selected.audioFormat.lossless) "Lossless output preserves decoded audio; it cannot restore detail missing from the source. Files can be large."
+                    else "Output bitrate controls file size. Higher settings cannot improve the source audio.", style = MaterialTheme.typography.bodySmall)
+            }
+
+            val estimate = if (selected?.audioOnly == true && selected.audioBitrateKbps != null && info.durationSec > 0)
+                selected.audioBitrateKbps * 1000L / 8L * info.durationSec else selected?.estimatedBytes
+            val size = estimate?.let { "≈ ${Format.bytes(it)}" }
             Button(
                 onClick = onDownload,
                 enabled = selected != null,
@@ -290,7 +315,7 @@ private fun PreviewCard(
                 Spacer(Modifier.width(8.dp))
                 val what = when {
                     selected == null -> "Download"
-                    selected.audioOnly -> "Download audio (M4A)"
+                    selected.audioOnly -> "Download ${selected.audioFormat.label} · ${selected.audioFormat.qualityLabel(selected.audioBitrateKbps)}"
                     else -> "Download MP4 · ${selected.label}"
                 }
                 Text(listOfNotNull(what, size).joinToString("  ·  "))

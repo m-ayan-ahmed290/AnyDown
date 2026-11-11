@@ -35,10 +35,12 @@ object CookieFile {
     fun forPlatform(text: String, platform: Platform, now: Long = System.currentTimeMillis() / 1000): String? {
         val lines = text.lineSequence().filter { raw ->
             val fields = raw.removePrefix("#HttpOnly_").split('\t')
+            val domain = fields[0].trimStart('.').lowercase()
+            val matches = platform.matches(domain) ||
+                (platform == Platform.THREADS && Platform.INSTAGRAM.matches(domain)) ||
+                (platform == Platform.YOUTUBE && (domain == "google.com" || domain.endsWith(".google.com")))
             if (raw.startsWith("#") && !raw.startsWith("#HttpOnly_")) false
-            else fields.size == 7 && (platform.matches(fields[0].trimStart('.').lowercase()) ||
-                    (platform == Platform.THREADS && Platform.INSTAGRAM.matches(fields[0].trimStart('.').lowercase()))) &&
-                fields[1] in listOf("TRUE", "FALSE") && fields[3] in listOf("TRUE", "FALSE") &&
+            else fields.size == 7 && matches && fields[1] in listOf("TRUE", "FALSE") && fields[3] in listOf("TRUE", "FALSE") &&
                 fields[4].toLongOrNull()?.let { it == 0L || it > now } == true && fields[5].isNotBlank()
         }.toList()
         return if (lines.isEmpty()) null else HEADER + "\n" + lines.joinToString("\n") + "\n"

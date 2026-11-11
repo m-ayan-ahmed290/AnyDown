@@ -50,6 +50,7 @@ class DownloadManager(
     private val store = DownloadStore(File(app.filesDir, "downloads.json"))
     private val lock = Any()
     private val jobs = ConcurrentHashMap<String, Job>()
+    private val audioProcesses = ConcurrentHashMap<String, Process>()
     private val processIds = ConcurrentHashMap<String, String>()
 
     private val _items = MutableStateFlow(
@@ -138,9 +139,11 @@ class DownloadManager(
             uploader = info.uploader,
             thumbnail = info.thumbnail,
             platform = info.platform,
-            qualityLabel = if (quality.audioOnly) "Audio (M4A)" else quality.label,
+            qualityLabel = if (quality.audioOnly) "${quality.audioFormat.label} · ${quality.audioFormat.qualityLabel(quality.audioBitrateKbps)}" else quality.label,
             heightCap = quality.heightCap,
             audioOnly = quality.audioOnly,
+            audioFormat = quality.audioFormat,
+            audioBitrateKbps = quality.audioFormat.validBitrate(quality.audioBitrateKbps).takeIf { quality.audioOnly },
             expectedStreams = if (!quality.audioOnly && quality.needsMerge) 2 else 1,
             extractorArgs = info.extractorArgs,
             status = DownloadStatus.QUEUED,
@@ -193,6 +196,7 @@ class DownloadManager(
         }
         persist()
         if (wasActive) {
+            audioProcesses[id]?.let { process -> scope.launch(Dispatchers.IO) { process.destroyForcibly() } }
             val processId = processIds[id]
             if (processId != null) scope.launch(Dispatchers.IO) {
                 runCatching { YoutubeDL.getInstance().destroyProcessById(processId) }
@@ -327,10 +331,14 @@ class DownloadManager(
             if (find(id)?.status != DownloadStatus.DOWNLOADING && find(id)?.status != DownloadStatus.PROCESSING) {
                 return // cancelled while finishing
             }
-            update(id) { it.copy(status = DownloadStatus.PROCESSING, progress = -1f, statusDetail = "Saving to Downloads…") }
+            update(id) { if (it.status == DownloadStatus.CANCELED) it else it.copy(status = DownloadStatus.PROCESSING, progress = -1f, statusDetail = "Saving to Downloads…") }
 
-            val output = findOutput(tmpDir, item.audioOnly)
+            var output = findOutput(tmpDir, item.audioOnly, item.audioFormat.extension)
                 ?: throw DownloaderException("The download finished but no output file was produced.")
+            if (item.audioOnly && item.audioBitrateKbps != null && !item.audioFormat.lossless) {
+                update(id) { if (it.status == DownloadStatus.CANCELED) it else it.copy(statusDetail = "Converting to ${item.audioFormat.label} · ${item.audioBitrateKbps} kbps…") }
+                output = convertAudio(item, output, tmpDir)
+            }
             val mime = MediaSaver.mimeFor(output)
             val saved = MediaSaver.save(app, output, mime, settings.useSubfolder.value, item.platform)
 
@@ -381,8 +389,11 @@ class DownloadManager(
             addOption("-o", "${dir.absolutePath}/%(title).100B.%(ext)s")
             if (item.audioOnly) {
                 addOption("-f", FormatSelector.AUDIO_FORMAT)
-                addOption("-x")
-                addOption("--audio-format", "m4a")
+                if (item.audioBitrateKbps == null || item.audioFormat.lossless) {
+                    addOption("-x")
+                    addOption("--audio-format", item.audioFormat.extension)
+                    addOption("--audio-quality", "0")
+                }
             } else {
                 addOption("-f", FormatSelector.VIDEO_FORMAT)
                 addOption("-S", FormatSelector.sortOrder(item.heightCap))
@@ -393,10 +404,37 @@ class DownloadManager(
             item.extractorArgs?.let { addOption("--extractor-args", it) }
         }
 
-    private fun findOutput(dir: File, audioOnly: Boolean): File? {
+    private fun convertAudio(item: DownloadItem, input: File, directory: File): File {
+        val output = File(directory, "${input.nameWithoutExtension} - audio.${item.audioFormat.extension}")
+        val binary = File(app.applicationInfo.nativeLibraryDir, "libffmpeg.so")
+        val packages = File(app.noBackupFilesDir, "youtubedl-android/packages")
+        val builder = ProcessBuilder(listOf(binary.absolutePath) + item.audioFormat.ffmpegArguments(input.absolutePath, output.absolutePath, item.audioBitrateKbps))
+            .redirectErrorStream(true)
+        builder.environment()["LD_LIBRARY_PATH"] = "${packages.absolutePath}/python/usr/lib:${packages.absolutePath}/ffmpeg/usr/lib:${packages.absolutePath}/aria2c/usr/lib:${app.applicationInfo.nativeLibraryDir}"
+        val process = builder.start()
+        audioProcesses[item.id] = process
+        try {
+            if (find(item.id)?.status == DownloadStatus.CANCELED || find(item.id) == null) process.destroyForcibly()
+            var noAudio = false
+            process.inputStream.bufferedReader().useLines { lines -> lines.forEach { line ->
+                if ("matches no streams" in line || "does not contain any stream" in line) noAudio = true
+            } }
+            val result = process.waitFor()
+            if (find(item.id)?.status == DownloadStatus.CANCELED || find(item.id) == null) throw YoutubeDL.CanceledException()
+            if (result != 0 || !output.isFile || output.length() == 0L) {
+                throw DownloaderException(if (noAudio) "This video has no audio track." else "Audio conversion failed. Try another format or quality.")
+            }
+            return output
+        } finally {
+            audioProcesses.remove(item.id, process)
+            process.destroy()
+        }
+    }
+
+    private fun findOutput(dir: File, audioOnly: Boolean, audioExtension: String): File? {
         val media = dir.listFiles { f -> f.isFile && f.extension.lowercase() in MEDIA_EXTENSIONS }
             ?.toList().orEmpty()
-        val preferred = if (audioOnly) "m4a" else "mp4"
+        val preferred = if (audioOnly) audioExtension else "mp4"
         return media.filter { it.extension.equals(preferred, true) }.maxByOrNull { it.length() }
             ?: media.maxByOrNull { it.length() }
     }
@@ -436,6 +474,6 @@ class DownloadManager(
 
     private companion object {
         val PERCENT = Regex("""\[download]\s+(\d+(?:\.\d+)?)%""")
-        val MEDIA_EXTENSIONS = setOf("mp4", "m4a", "mp3", "m4v", "mov", "webm", "mkv", "aac", "opus", "ogg")
+        val MEDIA_EXTENSIONS = setOf("mp4", "m4a", "mp3", "flac", "wav", "m4v", "mov", "webm", "mkv", "aac", "opus", "ogg")
     }
 }

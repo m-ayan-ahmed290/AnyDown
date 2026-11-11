@@ -251,6 +251,7 @@ private fun Choice(options: List<String>, selectedIndex: Int, onSelect: (Int) ->
 
 @Composable
 private fun AccountList(sites: List<SiteLogin>, vm: MainViewModel, saved: Set<Platform>, import: (Platform) -> Unit) {
+    val accountContext = LocalContext.current
     var expanded by remember { mutableStateOf<Platform?>(null) }
     sites.forEach { site ->
         TextButton(onClick = { expanded = if (expanded == site.platform) null else site.platform }, modifier = Modifier.fillMaxWidth()) {
@@ -258,7 +259,10 @@ private fun AccountList(sites: List<SiteLogin>, vm: MainViewModel, saved: Set<Pl
             Text(if (site.platform in saved) "Cookies saved" else "Set up")
         }
         if (expanded == site.platform) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { vm.loginSite = site }) { Text("Sign in") }
+            if (!site.embeddedLogin) Text("Import a Netscape cookies.txt export from a desktop browser or a browser with cookie-export support. Browser sign-in does not transfer cookies automatically.",
+                style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth())
+            if (site.embeddedLogin) OutlinedButton(onClick = { vm.loginSite = site }) { Text("Sign in") }
+            else TextButton(onClick = { accountContext.startActivity(android.content.Intent.createChooser(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(site.loginUrl)), "Choose a browser")) }) { Text("Open YouTube in browser") }
             TextButton(onClick = { import(site.platform) }) { Text("Import cookies") }
             if (site.platform in saved) TextButton(onClick = { vm.signOut(site.platform) }) { Text("Remove cookies") }
         }
