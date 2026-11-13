@@ -84,7 +84,7 @@ fun HomeScreen(
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Save a video or audio", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text(experience.subtitle, style = MaterialTheme.typography.bodyMedium)
-                if (experience.showStats) Row {
+                if (experience.showStats) FlowRow {
                     TextButton(onClick = { vm.tab = Tab.LIBRARY }) { Text("${downloads.count { it.status == DownloadStatus.COMPLETED }} saved") }
                     TextButton(onClick = { vm.tab = Tab.QUEUE }) { Text("${downloads.count { it.status.isPending }} in queue") }
                 }
@@ -154,11 +154,10 @@ private fun UrlInputCard(vm: MainViewModel, focus: FocusManager) {
                 shape = MaterialTheme.shapes.medium,
             )
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            FlowRow(modifier=Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.SpaceBetween, verticalArrangement=Arrangement.spacedBy(8.dp)) {
                 AnimatedVisibility(visible = platform != null) {
                     if (platform != null) PlatformChip(platform)
                 }
-                Spacer(Modifier.weight(1f))
                 Button(
                     onClick = { focus.clearFocus(); vm.fetch() },
                     enabled = check.isValid && vm.fetchState !is FetchState.Loading,

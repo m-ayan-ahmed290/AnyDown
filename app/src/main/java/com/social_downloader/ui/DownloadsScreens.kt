@@ -83,7 +83,7 @@ fun QueueScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            Text("Total speed: ${Format.speed(pending.sumOf { it.speedBytes.coerceAtLeast(0) }).ifEmpty { "—" }}")
+            Text("Total speed: ${Format.speed(com.social_downloader.download.QueueMetrics.speed(pending)).ifEmpty { "—" }}")
             TextButton(onClick={vm.downloads.pauseQueue(!paused)}) { Text(if(paused) "Resume queue" else "Pause waiting downloads") }
             if(paused) Text("Queue paused. Active downloads continue.",style=MaterialTheme.typography.bodySmall)
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -459,7 +459,7 @@ fun LibraryScreen(
                             )
                         }
                     }
-                    Row {
+                    FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                         TextButton(onClick={vm.settings.favorite(item.id)}){Text(if(item.id in favorites) "Unfavorite" else "Favorite")}
                         EntryMenu(item,{vm.useSource(item)},{vm.openSource(context,item)})
                     }

@@ -13,6 +13,12 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk=[28],application=Application::class)
 class ExperienceTest {
+    @Test fun speedDoesNotIncludeStaleProcessingRates() {
+        fun row(id: String,status: String,speed: Long) = DownloadItem.fromJson(org.json.JSONObject()
+            .put("id",id).put("url","https://example.com/a").put("status",status)).copy(speedBytes=speed)
+        assertEquals(1024L,com.social_downloader.download.QueueMetrics.speed(listOf(
+            row("a","DOWNLOADING",1024),row("b","PROCESSING",999999),row("c","QUEUED",8888),row("d","DOWNLOADING",-1))))
+    }
     @Test fun pausedQueueCanBePrioritizedWithoutChangingHistoryDates() {
         val app=RuntimeEnvironment.getApplication(); val settings=SettingsStore(app); val cookies=CookieStore(app)
         val manager=com.social_downloader.download.DownloadManager(app,YtDlpEngine(app,cookies),settings,cookies)

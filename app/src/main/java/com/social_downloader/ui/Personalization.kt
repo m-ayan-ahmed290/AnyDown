@@ -77,7 +77,7 @@ fun Personalization(vm: MainViewModel) {
                 OptionMenu("Default audio format", AudioFormat.entries.map { it.label }, AudioFormat.entries.indexOf(format)) { v -> vm.settings.customize { it.copy(audioFormat=AudioFormat.entries[v].name,audioBitrate=AudioFormat.entries[v].defaultBitrate ?: 0) } }
                 if (!format.lossless) OptionMenu("Default audio bitrate", format.bitrates.map { "$it kbps" }, format.bitrates.indexOf(format.validBitrate(e.audioBitrate)).coerceAtLeast(0)) { v -> vm.settings.customize { it.copy(audioBitrate=format.bitrates[v]) } }
                 Text("Back up appearance and download presets. Accounts, history and files are excluded.",style=MaterialTheme.typography.bodySmall)
-                Row {
+                FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick={export.launch("AnyDown-customization.json")}){Text("Export customization")}
                     TextButton(onClick={import.launch(arrayOf("application/json","text/plain"))}){Text("Import customization")}
                 }

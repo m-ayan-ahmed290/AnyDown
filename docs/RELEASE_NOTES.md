@@ -1,4 +1,4 @@
-AnyDown 3.0.0 adds 22 features, plus broad persistent in-app appearance controls. Install over the existing release; the package ID and signing key are unchanged.
+AnyDown 3.0.1 adds 22 features, plus broad persistent in-app appearance controls. Install over the existing release; the package ID and signing key are unchanged.
 
 New features (existing search, site filters, audio formats and theme modes are not counted again):
 1. Batch preparation and queueing of up to 25 media links, with progress and cancellation. Identical links and already pending URLs are skipped.
@@ -9,7 +9,7 @@ New features (existing search, site filters, audio formats and theme modes are n
 6. Download-next priority for queued items without changing their original timestamps.
 7. Retry all failed history items.
 8. Clear canceled history entries without deleting media files.
-9. Aggregate active download-speed display.
+9. Aggregate active network download-speed display, excluding stale rates on converting/saving items.
 10. Persistent favorites and a favorites-only library view.
 11. Audio-only/video-only library filters.
 12. Oldest-first and smallest-first sorting, in addition to the existing newest/largest choices.
