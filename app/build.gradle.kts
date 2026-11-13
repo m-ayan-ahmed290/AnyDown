@@ -14,8 +14,8 @@ android {
         applicationId = "com.social_downloader"
         minSdk = 28            // Android 9
         targetSdk = 35         // Android 15
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 8
+        versionName = "3.0.1"
 
         // yt-dlp's Python runtime and FFmpeg ship as native libraries.
         // Drop an ABI here to shrink the APK (most phones are arm64-v8a).
@@ -24,11 +24,24 @@ android {
         }
     }
 
+    signingConfigs {
+        val keyPath = System.getenv("ANDROID_KEYSTORE_PATH")
+        if (!keyPath.isNullOrBlank()) {
+            create("release") {
+                storeFile = file(keyPath)
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             isDebuggable = true
         }
         release {
+            signingConfig = signingConfigs.findByName("release")
             // Kept off so the bundled Python/FFmpeg/Jackson reflection code cannot be
             // broken by shrinking. Enable + add keep rules if you want a smaller release.
             isMinifyEnabled = false
@@ -40,6 +53,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    testOptions { unitTests.isIncludeAndroidResources = true }
 
     buildFeatures {
         compose = true
@@ -89,4 +104,18 @@ dependencies {
     implementation("io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
+
+// Isolate Robolectric's SDK cache from the real home directory (also works in read-only sandboxes).
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    val testHome = layout.buildDirectory.dir("test-home").get().asFile
+    doFirst { testHome.mkdirs() }
+    systemProperty("user.home", testHome.absolutePath)
+    systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+    listOf("http.proxyHost", "http.proxyPort", "https.proxyHost", "https.proxyPort", "javax.net.ssl.trustStore").forEach { key ->
+        System.getProperty(key)?.let { systemProperty(key, it) }
+    }
 }

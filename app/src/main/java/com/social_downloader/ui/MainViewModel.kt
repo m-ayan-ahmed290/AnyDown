@@ -49,7 +49,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val downloads = container.downloads
     val cookies = container.cookies
 
-    var tab by mutableStateOf(Tab.HOME)
+    var tab by mutableStateOf(runCatching { Tab.valueOf(settings.experience.value.startTab) }.getOrDefault(Tab.HOME))
     var input by mutableStateOf("")
         private set
     var fetchState by mutableStateOf<FetchState>(FetchState.Idle)
@@ -92,7 +92,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (UrlTools.check(url).isValid) fetch()
     }
 
-    /** Android Share sheet → "Social Downloader". */
+    /** Android Share sheet → "AnyDown". */
     fun onSharedText(text: String?) {
         val url = text?.let { UrlTools.extractUrl(it) }
         tab = Tab.HOME
@@ -108,7 +108,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val check = UrlTools.check(input)
         val url = check.url
         if (url == null) {
-            fetchState = FetchState.Error(check.error ?: "Paste a video link first.")
+            fetchState = FetchState.Error(check.error ?: "Paste a media link first.")
             return
         }
         fetchJob?.cancel()
@@ -118,7 +118,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val info = engine.fetchInfo(url)
                 fetchState = FetchState.Success(info)
-                selectedQuality = info.qualities.firstOrNull()
+                selectedQuality = com.social_downloader.engine.DownloadDefaults.choose(info, settings.experience.value)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: DownloaderException) {
@@ -130,7 +130,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun selectQuality(q: QualityOption) {
-        selectedQuality = q
+        val e = settings.experience.value
+        val format = runCatching { com.social_downloader.engine.AudioFormat.valueOf(e.audioFormat) }.getOrDefault(com.social_downloader.engine.AudioFormat.M4A)
+        selectedQuality = if (q.audioOnly) q.copy(audioFormat=format, audioBitrateKbps=format.validBitrate(e.audioBitrate), estimatedBytes=null) else q
+    }
+
+    fun selectAudioFormat(format: com.social_downloader.engine.AudioFormat) {
+        val q = selectedQuality?.takeIf { it.audioOnly } ?: return
+        selectedQuality = q.copy(audioFormat = format, audioBitrateKbps = format.defaultBitrate, estimatedBytes = null)
+    }
+    fun selectAudioBitrate(bitrate: Int) {
+        val q = selectedQuality?.takeIf { it.audioOnly } ?: return
+        selectedQuality = q.copy(audioBitrateKbps = q.audioFormat.validBitrate(bitrate), estimatedBytes = null)
     }
 
     fun download() {
@@ -141,6 +152,50 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         input = ""
         fetchState = FetchState.Idle
         selectedQuality = null
+    }
+
+    var batchInput by mutableStateOf("")
+    var batchStatus by mutableStateOf<String?>(null)
+    var batchFailures by mutableStateOf<List<Pair<String,String>>>(emptyList())
+        private set
+    var batchRunning by mutableStateOf(false)
+        private set
+    private var batchJob: Job? = null
+    fun cancelBatch() { batchJob?.cancel(); batchStatus = "Preparation canceled. Already queued downloads remain." }
+    fun startBatch() {
+        if (batchRunning) return
+        val links = com.social_downloader.engine.DownloadDefaults.links(batchInput)
+        if (links.isEmpty()) { batchStatus = "No valid links found."; return }
+        val defaults = settings.experience.value
+        batchRunning = true
+        batchFailures = emptyList()
+        batchJob = viewModelScope.launch {
+            var added = 0; var skipped = 0; var failed = 0
+            try {
+                links.forEachIndexed { i, link ->
+                    batchStatus = "Preparing ${i+1}/${links.size} · $added queued · $failed failed"
+                    if (downloads.items.value.any { it.url == link && it.status.isPending }) skipped++
+                    else try {
+                        val info = engine.fetchInfo(link)
+                        val q = com.social_downloader.engine.DownloadDefaults.choose(info, defaults)
+                            ?: throw IllegalStateException("No formats")
+                        downloads.enqueue(info,q); added++
+                    } catch(e: CancellationException) { throw e }
+                    catch(e: Exception) { failed++; batchFailures = batchFailures + (link to (if(e is DownloaderException) e.userMessage else "Could not prepare this link.")) }
+                }
+                batchStatus = "$added queued · $skipped already pending · $failed failed"
+            } finally { batchRunning = false }
+        }
+    }
+    fun useSource(item: DownloadItem) {
+        val check = UrlTools.check(item.url)
+        if (!check.isValid) { say("Imported files have no original website link."); return }
+        tab = Tab.HOME; onInputChange(check.url!!); fetch()
+    }
+    fun openSource(context: Context, item: DownloadItem) {
+        val url = UrlTools.check(item.url).url ?: return say("No website link for this imported file.")
+        runCatching { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_VIEW, Uri.parse(url)), "Open original")) }
+            .onFailure { say("No app can open this link.") }
     }
 
     fun openFile(context: Context, item: DownloadItem) {
@@ -173,7 +228,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 .putExtra(Intent.EXTRA_STREAM, Uri.parse(item.fileUri))
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             try {
-                context.startActivity(Intent.createChooser(send, "Share video"))
+                context.startActivity(Intent.createChooser(send, "Share media"))
             } catch (_: ActivityNotFoundException) {
                 say("No app available to share with.")
             }
@@ -182,11 +237,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun saveCookies(platform: Platform, text: String) {
         cookies.save(platform, text)
-        say("Signed in to ${platform.label}. Try your link again.")
+        if (platform == Platform.TIKTOK) engine.clearSnapshots()
+        say("Cookies saved for ${platform.label}. Try your link again.")
     }
 
     fun signOut(platform: Platform) {
         cookies.clear(platform)
+        if (platform == Platform.TIKTOK) engine.clearSnapshots()
+        android.webkit.CookieManager.getInstance().removeAllCookies(null)
+        android.webkit.CookieManager.getInstance().flush()
         say("Signed out of ${platform.label}.")
     }
 
@@ -216,8 +275,33 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             if (text == null || !CookieFile.looksValid(text)) {
                 say("That doesn't look like a valid cookies.txt (Netscape format, under 2 MB).")
             } else {
-                saveCookies(platform, text)
+                val scoped = CookieFile.forPlatform(text, platform)
+                if (scoped == null) say("No current cookies for ${platform.label} found in that file.")
+                else saveCookies(platform, scoped)
             }
+        }
+    }
+
+    var importStatus by mutableStateOf<String?>(null)
+        private set
+    var importing by mutableStateOf(false)
+        private set
+    fun importOldDownloads(uris: List<Uri>, site: Platform = Platform.OTHER) {
+        if (importing || uris.isEmpty()) return
+        importing = true
+        viewModelScope.launch {
+            var copied = 0; var skipped = 0; var failed = 0
+            try {
+                uris.forEachIndexed { index, uri ->
+                    importStatus = "Importing ${index + 1} of ${uris.size}…"
+                    try {
+                        val added = withContext(Dispatchers.IO) { downloads.importOldFile(uri, site) }
+                        if (added) copied++ else skipped++
+                    } catch (e: CancellationException) { throw e }
+                    catch (_: Exception) { failed++ }
+                }
+                importStatus = "$copied imported · $skipped already imported · $failed failed. Originals kept."
+            } finally { importing = false }
         }
     }
 

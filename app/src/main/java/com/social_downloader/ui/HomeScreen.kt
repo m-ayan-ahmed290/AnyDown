@@ -38,6 +38,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.font.FontWeight
+import com.social_downloader.data.DownloadStatus
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,6 +67,11 @@ fun HomeScreen(
     onDownload: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val showAdultSites by vm.settings.showAdultSites.collectAsStateWithLifecycle()
+    val downloads by vm.downloads.items.collectAsStateWithLifecycle()
+    val organized by vm.settings.useSubfolder.collectAsStateWithLifecycle()
+    val experience by vm.settings.experience.collectAsStateWithLifecycle()
+    var browseSites by remember(experience.directoryOpen) { mutableStateOf(experience.directoryOpen) }
     val focus = LocalFocusManager.current
     val state = vm.fetchState
 
@@ -69,7 +80,18 @@ fun HomeScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Save a video or audio", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text(experience.subtitle, style = MaterialTheme.typography.bodyMedium)
+                if (experience.showStats) FlowRow {
+                    TextButton(onClick = { vm.tab = Tab.LIBRARY }) { Text("${downloads.count { it.status == DownloadStatus.COMPLETED }} saved") }
+                    TextButton(onClick = { vm.tab = Tab.QUEUE }) { Text("${downloads.count { it.status.isPending }} in queue") }
+                }
+            }
+        }
         item { UrlInputCard(vm, focus) }
+        item { BatchDownloads(vm) }
 
         item {
             when (state) {
@@ -81,12 +103,16 @@ fun HomeScreen(
                     selected = vm.selectedQuality,
                     onSelect = vm::selectQuality,
                     onDownload = onDownload,
+                    organized = organized,
+                    onAudioFormat = vm::selectAudioFormat,
+                    onAudioBitrate = vm::selectAudioBitrate,
                 )
             }
         }
 
         if (state is FetchState.Idle) {
-            item { SupportedSitesCard() }
+            item { TextButton(onClick = { browseSites = !browseSites }) { Text(if (browseSites) "Hide website directory" else "Browse supported websites") } }
+            if (browseSites) item { SupportedSitesCard(showAdultSites) }
         }
     }
 }
@@ -106,7 +132,7 @@ private fun UrlInputCard(vm: MainViewModel, focus: FocusManager) {
                 value = vm.input,
                 onValueChange = vm::onInputChange,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Video link") },
+                label = { Text("Media link") },
                 placeholder = { Text("Paste a link…") },
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Rounded.Link, contentDescription = null) },
@@ -128,18 +154,17 @@ private fun UrlInputCard(vm: MainViewModel, focus: FocusManager) {
                 shape = MaterialTheme.shapes.medium,
             )
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            FlowRow(modifier=Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.SpaceBetween, verticalArrangement=Arrangement.spacedBy(8.dp)) {
                 AnimatedVisibility(visible = platform != null) {
                     if (platform != null) PlatformChip(platform)
                 }
-                Spacer(Modifier.weight(1f))
                 Button(
                     onClick = { focus.clearFocus(); vm.fetch() },
                     enabled = check.isValid && vm.fetchState !is FetchState.Loading,
                 ) {
                     Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Get video")
+                    Text("Find media")
                 }
             }
         }
@@ -160,7 +185,7 @@ private fun LoadingCard(engineState: EngineState) {
         ) {
             CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
             Column {
-                Text("Fetching video info…", style = MaterialTheme.typography.titleSmall)
+                Text("Fetching media details…", style = MaterialTheme.typography.titleSmall)
                 if (engineState is EngineState.Initializing) {
                     Text(
                         "Preparing the download engine (first launch only)",
@@ -203,6 +228,9 @@ private fun PreviewCard(
     selected: QualityOption?,
     onSelect: (QualityOption) -> Unit,
     onDownload: () -> Unit,
+    organized: Boolean,
+    onAudioFormat: (com.social_downloader.engine.AudioFormat) -> Unit,
+    onAudioBitrate: (Int) -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -257,7 +285,28 @@ private fun PreviewCard(
                 }
             }
 
-            val size = selected?.estimatedBytes?.let { "≈ ${Format.bytes(it)}" }
+            if (selected?.audioOnly == true) {
+                Text("Audio format", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    com.social_downloader.engine.AudioFormat.entries.forEach { format ->
+                        FilterChip(selected = selected.audioFormat == format, onClick = { onAudioFormat(format) }, label = { Text(format.label) })
+                    }
+                }
+                if (!selected.audioFormat.lossless) {
+                    Text("Audio quality", style = MaterialTheme.typography.labelLarge)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        selected.audioFormat.bitrates.forEach { bitrate ->
+                            FilterChip(selected = selected.audioBitrateKbps == bitrate, onClick = { onAudioBitrate(bitrate) }, label = { Text("$bitrate kbps") })
+                        }
+                    }
+                }
+                Text(if (selected.audioFormat.lossless) "Lossless output preserves decoded audio; it cannot restore detail missing from the source. Files can be large."
+                    else "Output bitrate controls file size. Higher settings cannot improve the source audio.", style = MaterialTheme.typography.bodySmall)
+            }
+
+            val estimate = if (selected?.audioOnly == true && selected.audioBitrateKbps != null && info.durationSec > 0)
+                selected.audioBitrateKbps * 1000L / 8L * info.durationSec else selected?.estimatedBytes
+            val size = estimate?.let { "≈ ${Format.bytes(it)}" }
             Button(
                 onClick = onDownload,
                 enabled = selected != null,
@@ -267,13 +316,13 @@ private fun PreviewCard(
                 Spacer(Modifier.width(8.dp))
                 val what = when {
                     selected == null -> "Download"
-                    selected.audioOnly -> "Download audio (M4A)"
+                    selected.audioOnly -> "Download ${selected.audioFormat.label} · ${selected.audioFormat.qualityLabel(selected.audioBitrateKbps)}"
                     else -> "Download MP4 · ${selected.label}"
                 }
                 Text(listOfNotNull(what, size).joinToString("  ·  "))
             }
             Text(
-                "Saved to Downloads/SocialDownloader as a single file with audio and video.",
+                if (organized) "Saved to Downloads/AnyDowns/${info.platform.folderName}." else "Saved to Downloads.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 4.dp),
@@ -283,31 +332,28 @@ private fun PreviewCard(
 }
 
 @Composable
-private fun SupportedSitesCard() {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
+private fun SupportedSitesCard(showAdultSites: Boolean) {
+    var search by remember { mutableStateOf("") }
+    val sites = Platform.directory(showAdultSites, search)
+    Card(modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = MaterialTheme.shapes.large,
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Works with", style = MaterialTheme.typography.titleSmall)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Platform.named.forEach { PlatformChip(it) }
+        shape = MaterialTheme.shapes.large) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("A world of media", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Your favorites, all in one place.", style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedTextField(value = search, onValueChange = { search = it }, modifier = Modifier.fillMaxWidth(),
+                singleLine = true, label = { Text("Search websites") },
+                leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
+                shape = MaterialTheme.shapes.medium)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                sites.forEach { PlatformChip(it) }
             }
-            Text(
-                "…plus 1000+ other sites supported by yt-dlp. Public videos only – private, " +
-                    "login-gated and DRM-protected content can't be downloaded.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                "Tip: in any app, tap Share → Social Downloader to start instantly.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (sites.isEmpty()) Text("No matching sites. You can still try a direct media link.")
+            Text("Plus hundreds more through yt-dlp. Support varies by site, region and sign-in requirements. DRM-protected media isn't supported.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Share a link from any app → AnyDown. Choose quality, then save.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
         }
     }
 }

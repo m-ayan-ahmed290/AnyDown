@@ -63,6 +63,7 @@ fun Thumbnail(
     durationSec: Long = 0,
     content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {},
 ) {
+    if (!LocalExperience.current.thumbnails) return
     Box(
         modifier = modifier
             .clip(MaterialTheme.shapes.medium)
@@ -120,5 +121,17 @@ fun EmptyState(icon: ImageVector, title: String, subtitle: String, modifier: Mod
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )
+    }
+}
+
+
+/** Uses the same vector as the launcher; tint follows Material You inside the app. */
+@Composable
+fun BrandMark(modifier: Modifier = Modifier) {
+    Surface(modifier = modifier, color = MaterialTheme.colorScheme.primaryContainer,
+        shape = RoundedCornerShape(12.dp)) {
+        Icon(androidx.compose.ui.res.painterResource(com.social_downloader.R.drawable.ic_anydown_mark),
+            contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.padding(5.dp))
     }
 }

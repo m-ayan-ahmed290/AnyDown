@@ -54,7 +54,7 @@ object QualityBuilder {
 
         val combinedBytes = bestAudio?.let { audioBytes }
             ?: formats.mapNotNull { sizeOf(it, durationSec) }.minOrNull()
-        options += QualityOption("audio", "Audio only", "M4A", null, true, false, combinedBytes)
+        options += QualityOption("audio", "Audio only", null, null, true, false, combinedBytes)
         return options
     }
 

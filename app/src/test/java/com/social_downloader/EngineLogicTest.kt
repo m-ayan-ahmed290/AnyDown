@@ -32,9 +32,19 @@ class UrlToolsTest {
             "https://www.threads.net/@a/post/b" to Platform.THREADS,
             "https://vm.tiktok.com/abc/" to Platform.TIKTOK,
             "https://fb.watch/abc/" to Platform.FACEBOOK,
-            "https://vimeo.com/123" to Platform.OTHER,
+            "https://vimeo.com/123" to Platform.VIMEO,
         )
         cases.forEach { (url, platform) -> assertEquals(url, platform, UrlTools.detect(url)) }
+    }
+
+    @Test fun recognizesExpandedSitesAndAdultHosts() {
+        assertEquals(Platform.SOUNDCLOUD, UrlTools.detect("https://on.soundcloud.com/example"))
+        assertEquals(Platform.PORNHUB, UrlTools.detect("https://www.pornhub.com/view_video.php?viewkey=test"))
+        assertEquals(Platform.OTHER, UrlTools.detect("https://pornhub.com.example.org/video"))
+        assertTrue(Platform.PORNHUB.adult)
+        assertFalse(Platform.YOUTUBE.adult)
+        assertEquals("Instagram", Platform.INSTAGRAM.folderName)
+        assertTrue(Platform.named.all { !it.folderName.contains('/') && it.folderName != ".." })
     }
 
     @Test fun doesNotConfuseLookalikeHosts() {
@@ -163,5 +173,52 @@ class CookieAndSpeedTest {
         assertEquals(2621440L, com.social_downloader.util.Format.parseSpeed("[download]  45.2% of  120.00MiB at    2.50MiB/s ETA 00:33"))
         assertNull(com.social_downloader.util.Format.parseSpeed("[download]  45.2% of 120MiB at Unknown B/s ETA Unknown"))
         assertEquals(512000L, com.social_downloader.util.Format.parseSpeed("at 500.00KiB/s"))
+    }
+}
+
+class AccountCookieTest {
+    @Test fun scopesImportsAndKeepsHttpOnlySessionCookies() {
+        val text = "#HttpOnly_.instagram.com\tTRUE\t/\tTRUE\t0\tsessionid\tsecret\n" +
+            ".evil.org\tTRUE\t/\tTRUE\t0\tsessionid\tunrelated\n" +
+            ".instagram.com\tTRUE\t/\tTRUE\t1\tstale\told\n"
+        val scoped = com.social_downloader.engine.CookieFile.forPlatform(text, Platform.INSTAGRAM, 100)!!
+        assertTrue(scoped.contains("#HttpOnly_"))
+        assertFalse(scoped.contains("unrelated"))
+        assertFalse(scoped.contains("stale"))
+        assertTrue(com.social_downloader.engine.CookieFile.hasSession(scoped, Platform.INSTAGRAM))
+        assertNull(com.social_downloader.engine.CookieFile.forPlatform(text, Platform.REDDIT, 100))
+    }
+    @Test fun anonymousCookiesAreNotAnInstagramLogin() {
+        val text = com.social_downloader.engine.CookieFile.build(mapOf(".instagram.com" to "csrftoken=anonymous"), 9999999999)!!
+        assertFalse(com.social_downloader.engine.CookieFile.hasSession(text, Platform.INSTAGRAM))
+    }
+    @Test fun adultAccountsAreCompleteAndSeparate() {
+        val adult = com.social_downloader.engine.SiteLogin.adult
+        assertEquals(Platform.named.filter { it.adult }.toSet(), adult.map { it.platform }.toSet())
+        assertTrue(com.social_downloader.engine.SiteLogin.all.none { it.platform.adult })
+        assertEquals(Platform.EPORNER, UrlTools.detect("https://www.eporner.com/video-test"))
+    }
+}
+
+class AudioAndYouTubeTest {
+    @Test fun bitrateSelectionsForceEncodingAndRemoveVideo() {
+        val args = com.social_downloader.engine.AudioFormat.MP3.ffmpegArguments("/input.mp4", "/output.mp3", 320)
+        assertTrue(args.containsAll(listOf("-vn", "-map", "0:a:0", "libmp3lame", "320k")))
+        assertFalse(args.contains("copy"))
+        assertEquals(192, com.social_downloader.engine.AudioFormat.MP3.validBitrate(9999))
+        assertNull(com.social_downloader.engine.AudioFormat.FLAC.validBitrate(320))
+        assertFalse(com.social_downloader.engine.AudioFormat.FLAC.ffmpegArguments("in", "out.flac", 320).contains("-b:a"))
+    }
+    @Test fun youtubeImportsGoogleAndYoutubeCookiesButNotLookalikeDomains() {
+        val text = com.social_downloader.engine.CookieFile.build(mapOf(
+            ".youtube.com" to "SAPISID=yt", ".google.com" to "SID=google",
+            ".google.com.evil.org" to "SID=foreign", ".notgoogle.com" to "SID=unrelated"), 9999999999)!!
+        val scoped = com.social_downloader.engine.CookieFile.forPlatform(text, Platform.YOUTUBE)!!
+        assertTrue(scoped.contains("SAPISID"))
+        assertTrue(scoped.contains("SID\tgoogle"))
+        assertFalse(scoped.contains("foreign"))
+        assertFalse(scoped.contains("unrelated"))
+        val site = com.social_downloader.engine.SiteLogin.all.single { it.platform == Platform.YOUTUBE }
+        assertFalse(site.embeddedLogin)
     }
 }

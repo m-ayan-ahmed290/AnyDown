@@ -22,22 +22,23 @@ import java.io.IOException
  *  - Android 9   : direct file write (needs WRITE_EXTERNAL_STORAGE) + media scan
  */
 object MediaSaver {
-    const val SUBFOLDER = "SocialDownloader"
+    const val SUBFOLDER = "AnyDowns"
 
     data class Saved(val uri: Uri, val path: String?, val displayName: String, val sizeBytes: Long)
 
-    fun save(context: Context, src: File, mime: String, useSubfolder: Boolean): Saved {
+    fun save(context: Context, src: File, mime: String, useSubfolder: Boolean, platform: com.social_downloader.engine.Platform): Saved {
         val name = sanitize(src.name)
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            saveScoped(context, src, name, mime, useSubfolder)
+            saveScoped(context, src, name, mime, useSubfolder, platform)
         } else {
-            saveLegacy(context, src, name, mime, useSubfolder)
+            saveLegacy(context, src, name, mime, useSubfolder, platform)
         }
     }
 
-    private fun saveScoped(context: Context, src: File, name: String, mime: String, useSubfolder: Boolean): Saved {
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.Q)
+    private fun saveScoped(context: Context, src: File, name: String, mime: String, useSubfolder: Boolean, platform: com.social_downloader.engine.Platform): Saved {
         val resolver = context.contentResolver
-        val relativePath = if (useSubfolder) "${Environment.DIRECTORY_DOWNLOADS}/$SUBFOLDER"
+        val relativePath = if (useSubfolder) "${Environment.DIRECTORY_DOWNLOADS}/$SUBFOLDER/${platform.folderName}"
         else Environment.DIRECTORY_DOWNLOADS
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, name)
@@ -63,25 +64,30 @@ object MediaSaver {
     }
 
     @Suppress("DEPRECATION")
-    private fun saveLegacy(context: Context, src: File, name: String, mime: String, useSubfolder: Boolean): Saved {
+    private fun saveLegacy(context: Context, src: File, name: String, mime: String, useSubfolder: Boolean, platform: com.social_downloader.engine.Platform): Saved {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE)
             != PackageManager.PERMISSION_GRANTED
         ) {
             throw DownloaderException("Storage permission is required on Android 9 to save into Downloads. Grant it and retry.")
         }
         val base = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        val dir = if (useSubfolder) File(base, SUBFOLDER) else base
-        if (!dir.exists() && !dir.mkdirs()) throw IOException("Couldn't create ${dir.absolutePath}")
+        val dir = if (useSubfolder) File(base, "$SUBFOLDER/${platform.folderName}") else base
+        if (!dir.exists() && !dir.mkdirs() && !dir.isDirectory) throw IOException("Couldn't create ${dir.absolutePath}")
 
         val stem = name.substringBeforeLast('.', name)
         val ext = name.substringAfterLast('.', "")
         var target = File(dir, name)
         var n = 1
-        while (target.exists()) {
+        while (!target.createNewFile()) {
             target = File(dir, if (ext.isEmpty()) "$stem ($n)" else "$stem ($n).$ext")
             n++
         }
-        src.inputStream().use { input -> target.outputStream().use { input.copyTo(it, 256 * 1024) } }
+        try {
+            src.inputStream().use { input -> target.outputStream().use { input.copyTo(it, 256 * 1024) } }
+        } catch (t: Throwable) {
+            target.delete()
+            throw t
+        }
         MediaScannerConnection.scanFile(context, arrayOf(target.absolutePath), arrayOf(mime), null)
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", target)
         return Saved(uri, target.absolutePath, target.name, target.length())
@@ -110,6 +116,9 @@ object MediaSaver {
         "mp4", "m4v" -> "video/mp4"
         "m4a" -> "audio/mp4"
         "mp3" -> "audio/mpeg"
+        "opus" -> "audio/ogg"
+        "flac" -> "audio/flac"
+        "wav" -> "audio/wav"
         "webm" -> "video/webm"
         "mkv" -> "video/x-matroska"
         else -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "application/octet-stream"

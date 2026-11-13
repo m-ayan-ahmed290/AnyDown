@@ -27,7 +27,7 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent)
     }
 
-    /** Handles Android's Share sheet: Share → Social Downloader. */
+    /** Handles Android's Share sheet: Share → AnyDown. */
     private fun handleIntent(intent: Intent?) {
         if (intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
             vm.onSharedText(intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString())

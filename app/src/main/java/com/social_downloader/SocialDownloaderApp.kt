@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
 class AppContainer(app: Application) {
     val settings = SettingsStore(app)
     val cookies = CookieStore(app)
-    val engine = YtDlpEngine(app, cookies)
+    val engine = YtDlpEngine(app, cookies) { settings.updateChannel.value }
     val downloads = DownloadManager(app, engine, settings, cookies)
 }
 
