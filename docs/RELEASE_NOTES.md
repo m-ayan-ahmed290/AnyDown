@@ -1,9 +1,29 @@
-AnyDown 2.2.1 adds audio format/quality choices and YouTube cookie import, and includes the TikTok recovery fix from 2.1.1.
+AnyDown 3.0.0 adds 22 features, plus broad persistent in-app appearance controls. Install over the existing release; the package ID and signing key are unchanged.
 
-- Choose Audio only in a media preview, then M4A, MP3, Opus, FLAC or WAV. M4A offers 96–256 kbps, MP3 96–320 kbps, and Opus 64–192 kbps. FLAC/WAV are lossless output formats. Higher bitrate/lossless output cannot improve the original recording or undo source compression.
-- Conversion outputs are isolated from source files so interrupted conversions cannot be selected as the source on retry.
-- Explicit bitrate choices use a real FFmpeg conversion rather than silently stream-copying an already matching codec. Audio format/quality persist across retries/restarts. Compressed-output estimates use duration and target bitrate. Conversion can be canceled.
-- YouTube now appears in Settings → Accounts, with Open YouTube in browser and Import cookies. Import a Netscape cookies.txt export; relevant YouTube/Google domains are retained and expired/unrelated entries removed. Google sign-in is not embedded. Cookies do not guarantee access or bypass DRM/bot checks.
-- TikTok downloads reuse fresh preview info, refresh expired media links once, and attempt one official engine update on recognized page-parser failures. The reported post 7643629243930348831 downloaded here with official stable yt-dlp 2026.10.26 without cookies, producing 720×1280 H.264 video and AAC audio.
+New features (existing search, site filters, audio formats and theme modes are not counted again):
+1. Batch preparation and queueing of up to 25 media links, with progress and cancellation. Identical links and already pending URLs are skipped.
+2. A batch failure list and retry of failed batch links.
+3. Saved preferred video resolution for future previews/batches.
+4. A saved audio-only preset: mode, format and bitrate.
+5. Pause/resume of waiting queue items; active transfers continue.
+6. Download-next priority for queued items without changing their original timestamps.
+7. Retry all failed history items.
+8. Clear canceled history entries without deleting media files.
+9. Aggregate active download-speed display.
+10. Persistent favorites and a favorites-only library view.
+11. Audio-only/video-only library filters.
+12. Oldest-first and smallest-first sorting, in addition to the existing newest/largest choices.
+13. A last-seven-days library filter.
+14. Recorded audio/video storage totals, excluding files detected as missing.
+15. Search history by title or platform.
+16. A failed-only history filter.
+17. Download again from a history/library entry, with a fresh preview.
+18. Open the original website link from an entry.
+19. Copy source links from download/history cards.
+20. Copy the displayed failure message.
+21. In-app personalization: seven palette choices plus a custom RGB accent (with contrast-adjusted shades), text scaling that respects system font scaling, three typefaces, three corner styles, three content widths, compact download cards, inactive navigation labels, thumbnail visibility, home counters, initial directory state, startup screen, in-app name and home message. The active tab retains its label; hidden inactive labels retain accessibility names. Reset restores customization and presets without removing files, history, favorites or cookies.
+22. Customization export/import through Android's file picker. JSON backups contain appearance and download presets only, excluding accounts, cookies, history and files. Unsupported or oversized backups are rejected.
 
-Validation includes local unit/Robolectric tests and Android lint/build checks. Host FFmpeg conversion of the reported clip produced audio-only AAC/M4A, MP3 (verified 320 kbps), Opus, FLAC and PCM/WAV files; ffprobe verified no video streams in all five. Android-device encoder execution and personal-account sign-in were not directly tested here. GitHub Actions builds and signs the APK using the existing AnyDown key. Install over your existing release without uninstalling.
+Where to find them: Settings → Customize your app; Download → Batch download links; Queue controls; History controls; Library filters and entry actions.
+
+Limits: customization controls AnyDown's own interface, not the launcher label, Android permissions or third-party login pages. Queue pause does not suspend an active transfer. Keep the app open while batch links are prepared. Imported files without a website URL cannot be opened/redownloaded from a source link. Higher-resolution/bitrate presets cannot improve source quality. Public/private site access still depends on yt-dlp and the provider.

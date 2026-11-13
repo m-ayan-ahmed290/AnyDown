@@ -49,7 +49,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val downloads = container.downloads
     val cookies = container.cookies
 
-    var tab by mutableStateOf(Tab.HOME)
+    var tab by mutableStateOf(runCatching { Tab.valueOf(settings.experience.value.startTab) }.getOrDefault(Tab.HOME))
     var input by mutableStateOf("")
         private set
     var fetchState by mutableStateOf<FetchState>(FetchState.Idle)
@@ -118,7 +118,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val info = engine.fetchInfo(url)
                 fetchState = FetchState.Success(info)
-                selectedQuality = info.qualities.firstOrNull()
+                selectedQuality = com.social_downloader.engine.DownloadDefaults.choose(info, settings.experience.value)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: DownloaderException) {
@@ -130,7 +130,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun selectQuality(q: QualityOption) {
-        selectedQuality = if (q.audioOnly) q.copy(audioBitrateKbps = q.audioFormat.validBitrate(q.audioBitrateKbps), estimatedBytes = null) else q
+        val e = settings.experience.value
+        val format = runCatching { com.social_downloader.engine.AudioFormat.valueOf(e.audioFormat) }.getOrDefault(com.social_downloader.engine.AudioFormat.M4A)
+        selectedQuality = if (q.audioOnly) q.copy(audioFormat=format, audioBitrateKbps=format.validBitrate(e.audioBitrate), estimatedBytes=null) else q
     }
 
     fun selectAudioFormat(format: com.social_downloader.engine.AudioFormat) {
@@ -150,6 +152,50 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         input = ""
         fetchState = FetchState.Idle
         selectedQuality = null
+    }
+
+    var batchInput by mutableStateOf("")
+    var batchStatus by mutableStateOf<String?>(null)
+    var batchFailures by mutableStateOf<List<Pair<String,String>>>(emptyList())
+        private set
+    var batchRunning by mutableStateOf(false)
+        private set
+    private var batchJob: Job? = null
+    fun cancelBatch() { batchJob?.cancel(); batchStatus = "Preparation canceled. Already queued downloads remain." }
+    fun startBatch() {
+        if (batchRunning) return
+        val links = com.social_downloader.engine.DownloadDefaults.links(batchInput)
+        if (links.isEmpty()) { batchStatus = "No valid links found."; return }
+        val defaults = settings.experience.value
+        batchRunning = true
+        batchFailures = emptyList()
+        batchJob = viewModelScope.launch {
+            var added = 0; var skipped = 0; var failed = 0
+            try {
+                links.forEachIndexed { i, link ->
+                    batchStatus = "Preparing ${i+1}/${links.size} · $added queued · $failed failed"
+                    if (downloads.items.value.any { it.url == link && it.status.isPending }) skipped++
+                    else try {
+                        val info = engine.fetchInfo(link)
+                        val q = com.social_downloader.engine.DownloadDefaults.choose(info, defaults)
+                            ?: throw IllegalStateException("No formats")
+                        downloads.enqueue(info,q); added++
+                    } catch(e: CancellationException) { throw e }
+                    catch(e: Exception) { failed++; batchFailures = batchFailures + (link to (if(e is DownloaderException) e.userMessage else "Could not prepare this link.")) }
+                }
+                batchStatus = "$added queued · $skipped already pending · $failed failed"
+            } finally { batchRunning = false }
+        }
+    }
+    fun useSource(item: DownloadItem) {
+        val check = UrlTools.check(item.url)
+        if (!check.isValid) { say("Imported files have no original website link."); return }
+        tab = Tab.HOME; onInputChange(check.url!!); fetch()
+    }
+    fun openSource(context: Context, item: DownloadItem) {
+        val url = UrlTools.check(item.url).url ?: return say("No website link for this imported file.")
+        runCatching { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_VIEW, Uri.parse(url)), "Open original")) }
+            .onFailure { say("No app can open this link.") }
     }
 
     fun openFile(context: Context, item: DownloadItem) {

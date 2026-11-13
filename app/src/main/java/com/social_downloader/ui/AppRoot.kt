@@ -46,6 +46,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -65,10 +67,15 @@ private fun Tab.icon(): ImageVector = when (this) {
 fun AppRoot(vm: MainViewModel) {
     val themeMode by vm.settings.themeMode.collectAsStateWithLifecycle()
     val dynamic by vm.settings.dynamicColor.collectAsStateWithLifecycle()
-    SocialDownloaderTheme(themeMode = themeMode, dynamicColor = dynamic) {
+    val experience by vm.settings.experience.collectAsStateWithLifecycle()
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    androidx.compose.runtime.CompositionLocalProvider(LocalExperience provides experience,
+        androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, density.fontScale * experience.textScale)) {
+    SocialDownloaderTheme(themeMode = themeMode, dynamicColor = dynamic, experience = experience) {
         val site = vm.loginSite
         if (site != null) LoginScreen(site, vm) else AppScaffold(vm)
     }
+}
 }
 
 @Composable
@@ -133,7 +140,7 @@ private fun AppScaffold(vm: MainViewModel) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     BrandMark(Modifier.size(36.dp))
                     Column {
-                        Text(if (vm.tab == Tab.HOME) "AnyDown" else vm.tab.label, fontWeight = FontWeight.Bold)
+                        Text(if (vm.tab == Tab.HOME) LocalExperience.current.appTitle else vm.tab.label, fontWeight = FontWeight.Bold)
                         Text("Your media. Your space.", style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -147,11 +154,11 @@ private fun AppScaffold(vm: MainViewModel) {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
             when (vm.tab) {
-                Tab.HOME -> HomeScreen(vm, engineState, onDownload = startDownload, modifier = Modifier.widthIn(max = 760.dp))
-                Tab.QUEUE -> QueueScreen(items, vm, Modifier.widthIn(max = 900.dp).fillMaxSize())
-                Tab.LIBRARY -> LibraryScreen(items, vm, Modifier.widthIn(max = 900.dp).fillMaxSize())
-                Tab.HISTORY -> HistoryScreen(items, vm, Modifier.widthIn(max = 900.dp).fillMaxSize())
-                Tab.SETTINGS -> SettingsScreen(vm, Modifier.widthIn(max = 900.dp).fillMaxSize())
+                Tab.HOME -> HomeScreen(vm, engineState, onDownload = startDownload, modifier = Modifier.widthIn(max = LocalExperience.current.width.dp))
+                Tab.QUEUE -> QueueScreen(items, vm, Modifier.widthIn(max = LocalExperience.current.width.dp).fillMaxSize())
+                Tab.LIBRARY -> LibraryScreen(items, vm, Modifier.widthIn(max = LocalExperience.current.width.dp).fillMaxSize())
+                Tab.HISTORY -> HistoryScreen(items, vm, Modifier.widthIn(max = LocalExperience.current.width.dp).fillMaxSize())
+                Tab.SETTINGS -> SettingsScreen(vm, Modifier.widthIn(max = LocalExperience.current.width.dp).fillMaxSize())
             }
         }
     }
@@ -159,6 +166,7 @@ private fun AppScaffold(vm: MainViewModel) {
 
 @Composable
 internal fun AnyDownNavigationBar(selectedTab: Tab, pendingCount: Int, onSelect: (Tab) -> Unit) {
+    val experience=LocalExperience.current
     Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, tonalElevation = 2.dp) {
         Row(Modifier.navigationBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -166,8 +174,9 @@ internal fun AnyDownNavigationBar(selectedTab: Tab, pendingCount: Int, onSelect:
                 val selected = selectedTab == tab
                 val color by animateColorAsState(if (selected) MaterialTheme.colorScheme.primaryContainer
                     else MaterialTheme.colorScheme.surfaceContainerLow, label = "Tab color")
-                Surface(modifier = Modifier.weight(1f).testTag("tab-surface-${tab.name}"), color = color, shape = RoundedCornerShape(20.dp)) {
+                Surface(modifier = Modifier.weight(1f).testTag("tab-surface-${tab.name}"), color = color, shape = MaterialTheme.shapes.large) {
                     Column(Modifier.selectable(selected, role = Role.Tab, onClick = { onSelect(tab) })
+                    .semantics { if(!selected && !experience.navLabels) contentDescription=tab.label }
                         .padding(horizontal = 2.dp, vertical = 10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -177,7 +186,7 @@ internal fun AnyDownNavigationBar(selectedTab: Tab, pendingCount: Int, onSelect:
                             Icon(tab.icon(), contentDescription = null, modifier = Modifier.size(23.dp),
                                 tint = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Text(tab.label, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        if (selected || LocalExperience.current.navLabels) Text(tab.label, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                             color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }

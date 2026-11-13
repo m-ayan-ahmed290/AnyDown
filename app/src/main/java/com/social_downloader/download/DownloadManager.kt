@@ -51,6 +51,15 @@ class DownloadManager(
     private val lock = Any()
     private val jobs = ConcurrentHashMap<String, Job>()
     private val audioProcesses = ConcurrentHashMap<String, Process>()
+    private val _queuePaused = MutableStateFlow(false)
+    val queuePaused: StateFlow<Boolean> = _queuePaused.asStateFlow()
+    fun pauseQueue(value: Boolean) { _queuePaused.value = value; if (!value) pump() }
+    fun retryFailed() { _items.value.filter { it.status == DownloadStatus.FAILED }.forEach { retry(it.id) } }
+    fun clearCanceled() { _items.update { it.filterNot { row -> row.status == DownloadStatus.CANCELED } }; persist() }
+    fun next(id: String) {
+        val priority = ((_items.value.filter { it.status == DownloadStatus.QUEUED }.minOfOrNull { it.queuePriority } ?: 0)-1).coerceAtLeast(-1000000)
+        update(id) { if (it.status == DownloadStatus.QUEUED) it.copy(queuePriority=priority) else it }; persist(); pump()
+    }
     private val processIds = ConcurrentHashMap<String, String>()
 
     private val _items = MutableStateFlow(
@@ -175,7 +184,7 @@ class DownloadManager(
         }
         update(id) {
             it.copy(
-                status = DownloadStatus.QUEUED, progress = -1f, etaSeconds = -1, error = null,
+                status = DownloadStatus.QUEUED, queuePriority = 0, progress = -1f, etaSeconds = -1, error = null,
                 statusDetail = null, createdAt = System.currentTimeMillis(), finishedAt = 0,
             )
         }
@@ -227,9 +236,10 @@ class DownloadManager(
 
     private fun pump() {
         synchronized(lock) {
+            if (_queuePaused.value) return
             val max = settings.maxConcurrent.value
             var active = jobs.size
-            val queued = _items.value.filter { it.status == DownloadStatus.QUEUED }.sortedBy { it.createdAt }
+            val queued = _items.value.filter { it.status == DownloadStatus.QUEUED }.sortedWith(compareBy<com.social_downloader.data.DownloadItem>{it.queuePriority}.thenBy{it.createdAt})
             for (item in queued) {
                 if (active >= max) break
                 update(item.id) { it.copy(status = DownloadStatus.DOWNLOADING, progress = -1f, etaSeconds = -1) }

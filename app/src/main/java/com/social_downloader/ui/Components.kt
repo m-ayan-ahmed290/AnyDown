@@ -63,6 +63,7 @@ fun Thumbnail(
     durationSec: Long = 0,
     content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {},
 ) {
+    if (!LocalExperience.current.thumbnails) return
     Box(
         modifier = modifier
             .clip(MaterialTheme.shapes.medium)

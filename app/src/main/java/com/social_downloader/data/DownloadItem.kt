@@ -41,8 +41,10 @@ data class DownloadItem(
     val speedBytes: Long = -1,
     val audioFormat: com.social_downloader.engine.AudioFormat = com.social_downloader.engine.AudioFormat.M4A,
     val audioBitrateKbps: Int? = null,
+    val queuePriority: Int = 0,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
+        put("queuePriority", queuePriority)
         put("id", id)
         put("url", url)
         put("title", title)
@@ -72,6 +74,7 @@ data class DownloadItem(
             if (isNull(key)) null else optString(key).takeIf { it.isNotEmpty() }
 
         fun fromJson(o: JSONObject): DownloadItem = DownloadItem(
+            queuePriority = o.optInt("queuePriority",0).coerceIn(-1000000,0),
             id = o.getString("id"),
             url = o.getString("url"),
             title = o.optString("title", "Video"),

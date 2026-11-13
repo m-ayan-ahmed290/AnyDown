@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalLayoutApi::class)
+
 package com.social_downloader.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +38,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -62,7 +66,8 @@ fun QueueScreen(
     vm: MainViewModel,
     modifier: Modifier = Modifier,
 ) {
-    val pending = items.filter { it.status.isPending }.sortedBy { it.createdAt }
+    val paused by vm.downloads.queuePaused.collectAsStateWithLifecycle()
+    val pending = items.filter { it.status.isPending }.sortedWith(compareBy<DownloadItem>{it.queuePriority}.thenBy{it.createdAt})
     if (pending.isEmpty()) {
         EmptyState(
             icon = Icons.Rounded.CloudDownload,
@@ -78,6 +83,9 @@ fun QueueScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
+            Text("Total speed: ${Format.speed(pending.sumOf { it.speedBytes.coerceAtLeast(0) }).ifEmpty { "—" }}")
+            TextButton(onClick={vm.downloads.pauseQueue(!paused)}) { Text(if(paused) "Resume queue" else "Pause waiting downloads") }
+            if(paused) Text("Queue paused. Active downloads continue.",style=MaterialTheme.typography.bodySmall)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "${pending.size} in progress",
@@ -91,6 +99,7 @@ fun QueueScreen(
             DownloadCard(
                 item = item,
                 onCancel = { vm.downloads.cancel(item.id) },
+                onNext = { vm.downloads.next(item.id) },
             )
         }
     }
@@ -105,11 +114,15 @@ fun HistoryScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val finished = items.filter { !it.status.isPending }.sortedByDescending { maxOf(it.finishedAt, it.createdAt) }
+    var search by remember { mutableStateOf("") }
+    var failuresOnly by remember { mutableStateOf(false) }
+    val allFinished = items.filter { !it.status.isPending }
+    val finished = allFinished.filter { (!failuresOnly || it.status == DownloadStatus.FAILED) &&
+        (it.title.contains(search,true) || it.platform.label.contains(search,true)) }.sortedByDescending { maxOf(it.finishedAt,it.createdAt) }
     var toDelete by remember { mutableStateOf<DownloadItem?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
 
-    if (finished.isEmpty()) {
+    if (allFinished.isEmpty()) {
         EmptyState(
             icon = Icons.Rounded.History,
             title = "No history yet",
@@ -124,6 +137,15 @@ fun HistoryScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        item {
+            OutlinedTextField(search,{search=it},modifier=Modifier.fillMaxWidth(),label={Text("Search history")},singleLine=true)
+            FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                FilterChip(failuresOnly,{failuresOnly=!failuresOnly},label={Text("Failed only")})
+                TextButton(onClick=vm.downloads::retryFailed){Text("Retry all failed")}
+                TextButton(onClick=vm.downloads::clearCanceled){Text("Clear canceled")}
+            }
+            if(finished.isEmpty()) Text("No matching history.")
+        }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -145,6 +167,8 @@ fun HistoryScreen(
                 onShare = { vm.shareFile(context, item) },
                 onRetry = { vm.downloads.retry(item.id) },
                 onDelete = { toDelete = item },
+                onAgain = { vm.useSource(item) },
+                onSource = { vm.openSource(context,item) },
             )
         }
     }
@@ -208,13 +232,17 @@ fun DownloadCard(
     onShare: (() -> Unit)? = null,
     onRetry: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
+    onNext: (() -> Unit)? = null,
+    onAgain: (() -> Unit)? = null,
+    onSource: (() -> Unit)? = null,
 ) {
+    val clipboard=androidx.compose.ui.platform.LocalClipboardManager.current
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         shape = MaterialTheme.shapes.large,
     ) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.padding(if(LocalExperience.current.compact) 8.dp else 12.dp), verticalArrangement = Arrangement.spacedBy(if(LocalExperience.current.compact) 4.dp else 10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Thumbnail(
                     url = item.thumbnail,
@@ -269,6 +297,7 @@ fun DownloadCard(
                 DownloadStatus.CANCELED -> StatusText("Canceled")
             }
 
+            EntryMenu(item,onAgain,onSource,onNext)
             val hasActions = onCancel != null || onOpen != null || onShare != null || onRetry != null || onDelete != null
             if (hasActions) {
                 Row(
@@ -320,16 +349,24 @@ fun LibraryScreen(
     val showAdultSites by vm.settings.showAdultSites.collectAsStateWithLifecycle()
     var search by remember { mutableStateOf("") }
     var platform by remember { mutableStateOf<com.social_downloader.engine.Platform?>(null) }
-    var largestFirst by remember { mutableStateOf(false) }
+    var sort by remember { mutableStateOf(0) }
+    var kind by remember { mutableStateOf(0) }
+    var favoritesOnly by remember { mutableStateOf(false) }
+    var recentOnly by remember { mutableStateOf(false) }
+    val favorites by vm.settings.favorites.collectAsStateWithLifecycle()
     val allVideos = items.filter { it.status == DownloadStatus.COMPLETED }
     val filtered = allVideos.filter {
         (platform == null || it.platform == platform) &&
+            (!favoritesOnly || it.id in favorites) &&
+            (!recentOnly || it.finishedAt >= System.currentTimeMillis()-7L*86400000) &&
+            (kind == 0 || (kind == 1 && it.mimeType.orEmpty().startsWith("audio/")) || (kind == 2 && it.mimeType.orEmpty().startsWith("video/"))) &&
             (it.title.contains(search, true) || it.fileName.orEmpty().contains(search, true))
     }
-    val videos = if (largestFirst) filtered.sortedByDescending { it.sizeBytes } else filtered.sortedByDescending { it.finishedAt }
+    val videos = when(sort) { 1 -> filtered.sortedBy { it.finishedAt }; 2 -> filtered.sortedByDescending { it.sizeBytes }; 3 -> filtered.sortedBy { it.sizeBytes }; else -> filtered.sortedByDescending { it.finishedAt } }
     var missing by remember { mutableStateOf(emptySet<String>()) }
     var toDelete by remember { mutableStateOf<DownloadItem?>(null) }
     var confirmAll by remember { mutableStateOf(false) }
+    var deletionTargets by remember { mutableStateOf<List<DownloadItem>>(emptyList()) }
 
     // Re-check which files still exist (the user may have deleted some in a file manager).
     LaunchedEffect(allVideos.map { it.id to it.fileUri }) {
@@ -368,10 +405,13 @@ fun LibraryScreen(
             }
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = !largestFirst, onClick = { largestFirst = false }, label = { Text("Newest") })
-                FilterChip(selected = largestFirst, onClick = { largestFirst = true }, label = { Text("Largest") })
+            OptionMenu("Sort",listOf("Newest","Oldest","Largest","Smallest"),sort){sort=it}
+            FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                listOf("All media","Audio","Video").forEachIndexed { i,label -> FilterChip(kind==i,{kind=i},label={Text(label)}) }
+                FilterChip(favoritesOnly,{favoritesOnly=!favoritesOnly},label={Text("Favorites")})
+                FilterChip(recentOnly,{recentOnly=!recentOnly},label={Text("Last 7 days")})
             }
+            Text("Audio: ${Format.bytes(allVideos.filter { it.id !in missing && it.mimeType.orEmpty().startsWith("audio/") }.sumOf { it.sizeBytes })} · Video: ${Format.bytes(allVideos.filter { it.id !in missing && it.mimeType.orEmpty().startsWith("video/") }.sumOf { it.sizeBytes })}",style=MaterialTheme.typography.bodySmall)
             if (videos.isEmpty()) Text("No downloads match your search.")
         }
         item {
@@ -381,7 +421,7 @@ fun LibraryScreen(
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = { confirmAll = true }) {
+                TextButton(onClick = { deletionTargets = videos.toList(); confirmAll = true }) {
                     Icon(Icons.Rounded.DeleteSweep, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Delete shown")
@@ -418,6 +458,10 @@ fun LibraryScreen(
                                 else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    }
+                    Row {
+                        TextButton(onClick={vm.settings.favorite(item.id)}){Text(if(item.id in favorites) "Unfavorite" else "Favorite")}
+                        EntryMenu(item,{vm.useSource(item)},{vm.openSource(context,item)})
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         if (!isMissing) {
@@ -460,14 +504,32 @@ fun LibraryScreen(
         AlertDialog(
             onDismissRequest = { confirmAll = false },
             title = { Text("Delete shown media?") },
-            text = { Text("This permanently deletes ${videos.size} file(s) downloaded by this app.") },
+            text = { Text("This permanently deletes ${deletionTargets.size} file(s) downloaded by this app.") },
             confirmButton = {
                 Button(onClick = {
-                    videos.forEach { vm.downloads.remove(it.id, deleteFile = true) }
+                    deletionTargets.forEach { vm.downloads.remove(it.id, deleteFile = true) }
                     confirmAll = false
                 }) { Text("Delete shown") }
             },
             dismissButton = { TextButton(onClick = { confirmAll = false }) { Text("Cancel") } },
         )
+    }
+}
+
+@Composable
+private fun EntryMenu(item: DownloadItem, again: (() -> Unit)? = null, source: (() -> Unit)? = null, next: (() -> Unit)? = null) {
+    var open by remember { mutableStateOf(false) }
+    val clipboard=androidx.compose.ui.platform.LocalClipboardManager.current
+    val web=com.social_downloader.engine.UrlTools.check(item.url).isValid
+    androidx.compose.foundation.layout.Box {
+        TextButton(onClick={open=true}){Text("More")}
+        androidx.compose.material3.DropdownMenu(open,{open=false}) {
+            if(item.status == DownloadStatus.QUEUED && next!=null) androidx.compose.material3.DropdownMenuItem(text={Text("Download next")},onClick={next();open=false})
+            if(again!=null) androidx.compose.material3.DropdownMenuItem(text={Text("Download again")},enabled=web,onClick={again();open=false})
+            if(source!=null) androidx.compose.material3.DropdownMenuItem(text={Text("Open original")},enabled=web,onClick={source();open=false})
+            if(web) androidx.compose.material3.DropdownMenuItem(text={Text("Copy link")},onClick={clipboard.setText(androidx.compose.ui.text.AnnotatedString(item.url));open=false})
+            else androidx.compose.material3.DropdownMenuItem(text={Text("Original website link unavailable")},enabled=false,onClick={})
+            if(item.status == DownloadStatus.FAILED) androidx.compose.material3.DropdownMenuItem(text={Text("Copy error")},onClick={clipboard.setText(androidx.compose.ui.text.AnnotatedString(item.error.orEmpty()));open=false})
+        }
     }
 }

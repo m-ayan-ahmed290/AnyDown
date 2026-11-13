@@ -11,6 +11,20 @@ enum class ThemeMode { SYSTEM, LIGHT, DARK }
 class SettingsStore(context: Context) {
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
+    private val _experience = MutableStateFlow(Experience.parse(prefs.getString("experience", null)))
+    val experience: StateFlow<Experience> = _experience.asStateFlow()
+    fun customize(change: (Experience) -> Experience) {
+        val value = Experience.parse(change(_experience.value).json())
+        _experience.value = value; prefs.edit().putString("experience", value.json()).apply()
+    }
+    fun resetCustomization() { customize { Experience() }; setThemeMode(ThemeMode.SYSTEM); setDynamicColor(true) }
+    private val _favorites = MutableStateFlow(prefs.getStringSet("favorites", emptySet())!!.toSet())
+    val favorites: StateFlow<Set<String>> = _favorites.asStateFlow()
+    fun favorite(id: String) {
+        val next = _favorites.value.toMutableSet().apply { if (!add(id)) remove(id) }.toSet()
+        _favorites.value = next; prefs.edit().putStringSet("favorites", next).apply()
+    }
+
     private val _themeMode = MutableStateFlow(
         runCatching { ThemeMode.valueOf(prefs.getString("theme", "SYSTEM")!!) }.getOrDefault(ThemeMode.SYSTEM),
     )

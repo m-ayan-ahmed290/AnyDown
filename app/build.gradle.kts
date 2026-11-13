@@ -14,8 +14,8 @@ android {
         applicationId = "com.social_downloader"
         minSdk = 28            // Android 9
         targetSdk = 35         // Android 15
-        versionCode = 6
-        versionName = "2.2.1"
+        versionCode = 7
+        versionName = "3.0.0"
 
         // yt-dlp's Python runtime and FFmpeg ship as native libraries.
         // Drop an ABI here to shrink the APK (most phones are arm64-v8a).

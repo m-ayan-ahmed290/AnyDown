@@ -70,7 +70,8 @@ fun HomeScreen(
     val showAdultSites by vm.settings.showAdultSites.collectAsStateWithLifecycle()
     val downloads by vm.downloads.items.collectAsStateWithLifecycle()
     val organized by vm.settings.useSubfolder.collectAsStateWithLifecycle()
-    var browseSites by remember { mutableStateOf(false) }
+    val experience by vm.settings.experience.collectAsStateWithLifecycle()
+    var browseSites by remember(experience.directoryOpen) { mutableStateOf(experience.directoryOpen) }
     val focus = LocalFocusManager.current
     val state = vm.fetchState
 
@@ -82,14 +83,15 @@ fun HomeScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Save a video or audio", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("Paste a link or share one from another app.", style = MaterialTheme.typography.bodyMedium)
-                Row {
+                Text(experience.subtitle, style = MaterialTheme.typography.bodyMedium)
+                if (experience.showStats) Row {
                     TextButton(onClick = { vm.tab = Tab.LIBRARY }) { Text("${downloads.count { it.status == DownloadStatus.COMPLETED }} saved") }
                     TextButton(onClick = { vm.tab = Tab.QUEUE }) { Text("${downloads.count { it.status.isPending }} in queue") }
                 }
             }
         }
         item { UrlInputCard(vm, focus) }
+        item { BatchDownloads(vm) }
 
         item {
             when (state) {

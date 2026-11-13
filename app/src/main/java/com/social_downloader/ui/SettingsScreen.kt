@@ -85,6 +85,8 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
         modifier = modifier.verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        Personalization(vm)
+
         Section("Appearance") {
             Text("Theme", style = MaterialTheme.typography.labelLarge)
             Choice(
